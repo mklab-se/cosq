@@ -3,3 +3,4 @@
 pub mod auth;
 pub mod completion;
 pub mod init;
+pub mod query;

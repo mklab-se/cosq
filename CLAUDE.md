@@ -29,15 +29,17 @@ crates/
         auth.rs     # `cosq auth` (status/login/logout)
         completion.rs # `cosq completion` (bash/zsh/fish/powershell)
         init.rs     # `cosq init` (interactive Cosmos DB account setup)
+        query.rs    # `cosq query` (SQL query execution against Cosmos DB)
   cosq-core/        # Core types and configuration
     src/
       lib.rs        # Module exports
-      config.rs     # cosq.yaml config format (load/save/find)
+      config.rs     # Config format (load/save from ~/.config/cosq/)
   cosq-client/      # Azure Cosmos DB client and authentication
     src/
       lib.rs        # Module exports
       auth.rs       # Azure CLI auth (token acquisition, login status)
-      arm.rs        # ARM discovery (subscriptions, Cosmos DB accounts)
+      arm.rs        # ARM discovery (subscriptions, Cosmos DB accounts, RBAC role management)
+      cosmos.rs     # Cosmos DB data plane client (query, list databases/containers)
       error.rs      # ClientError types with helpful hints
 ```
 
@@ -54,7 +56,8 @@ crates/
 - Interactive prompts via `dialoguer` with fuzzy-select
 - Error handling: `anyhow` (CLI), `thiserror` (libraries)
 - Azure auth: delegates to `az` CLI for token acquisition
-- Config: `cosq.yaml` in project directory, searched up parent dirs
+- Cosmos DB data plane: REST API with AAD token auth, pagination via `x-ms-continuation`
+- Config: `~/.config/cosq/config.yaml` (via `dirs::config_dir()`), includes optional `database`/`container`
 - Update checker: background task, cached at `~/.cache/cosq/`, skip with `COSQ_NO_UPDATE_CHECK=1`
 
 ## Releasing
@@ -73,3 +76,22 @@ crates/
 - Edition 2024, MSRV 1.85
 - `cargo clippy` with `-D warnings` (zero warnings policy)
 - `cargo fmt` enforced in CI
+
+## Quality Requirements
+
+### Testing
+- **Always run the full test suite before declaring work complete:** `cargo test --workspace`
+- **Always run the full CI check before pushing:** `cargo fmt --all -- --check && cargo clippy --workspace -- -D warnings && cargo test --workspace`
+- Write unit tests for all new functionality — aim for high code coverage
+- Test edge cases and error paths, not just the happy path
+- For code that interacts with external services (Azure, crates.io), test the parsing/logic locally with mock data
+- Run the CLI binary to verify commands work end-to-end (e.g. `cargo run -- init`, `cargo run -- auth status`)
+
+### Documentation
+- **Before pushing or releasing, review all documentation for accuracy:**
+  - `README.md` — features, quick start, badges
+  - `INSTALL.md` — installation methods, shell completions
+  - `CHANGELOG.md` — new entries for every user-visible change
+  - `CLAUDE.md` — architecture, commands, patterns
+- When adding new commands, flags, or crates, update all relevant docs in the same commit
+- `CHANGELOG.md` must be updated for every release with a dated entry following Keep a Changelog format

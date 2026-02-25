@@ -29,6 +29,20 @@ pub struct Cli {
 
 #[derive(clap::Subcommand)]
 pub enum Commands {
+    /// Execute a SQL query against Cosmos DB
+    Query {
+        /// SQL query string
+        sql: String,
+
+        /// Database name (overrides cosq.yaml)
+        #[arg(long)]
+        db: Option<String>,
+
+        /// Container name (overrides cosq.yaml)
+        #[arg(long)]
+        container: Option<String>,
+    },
+
     /// Initialize cosq with a Cosmos DB account
     Init {
         /// Cosmos DB account name (skip interactive selection)
@@ -38,6 +52,10 @@ pub enum Commands {
         /// Azure subscription ID (skip interactive selection)
         #[arg(long)]
         subscription: Option<String>,
+
+        /// Auto-confirm prompts (e.g. RBAC role assignment)
+        #[arg(long, short)]
+        yes: bool,
     },
 
     /// Manage Azure authentication
@@ -78,13 +96,24 @@ pub enum Shell {
 impl Cli {
     pub async fn run(self) -> Result<()> {
         match self.command {
+            Some(Commands::Query { sql, db, container }) => {
+                crate::commands::query::run(crate::commands::query::QueryArgs {
+                    sql,
+                    db,
+                    container,
+                    quiet: self.quiet,
+                })
+                .await
+            }
             Some(Commands::Init {
                 account,
                 subscription,
+                yes,
             }) => {
                 crate::commands::init::run(crate::commands::init::InitArgs {
                     account,
                     subscription,
+                    yes,
                 })
                 .await
             }

@@ -16,8 +16,8 @@ rust-version = "1.85"
 
 [workspace.dependencies]
 # Internal crates
-cosq-core = { path = "crates/cosq-core", version = "=0.2.0" }
-cosq-client = { path = "crates/cosq-client", version = "=0.2.0" }
+cosq-core = { version = "0.2.0", path = "crates/cosq-core" }
+cosq-client = { version = "0.2.0", path = "crates/cosq-client" }
 
 # CLI
 clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }
@@ -49,6 +49,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Versioning & time
 semver = "1.0"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+
+# URL encoding
+urlencoding = "2.1"
+
+# UUID generation
+uuid = { version = "1.11", features = ["v4"] }
 
 # Directories
 dirs = "6.0"

@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **SQL query execution (`cosq query`)** — execute SQL queries against Cosmos DB from the command line. Resolves database and container from `--db`/`--container` flags, `cosq.yaml` config, or interactive fuzzy-select prompts. Handles cross-partition queries via partition key range fanout, pagination via `x-ms-continuation`, displays request charge (RUs) on stderr, and outputs JSON to stdout for pipe-friendly workflows. First interactive selection is saved to `cosq.yaml` for subsequent runs
+- **Automatic data plane RBAC setup** — `cosq init` now checks if the user has Cosmos DB data plane access and offers to assign the Data Contributor role automatically. Supports `--yes` flag for non-interactive use
+- **Cosmos DB data plane client (`cosq-client/cosmos.rs`)** — REST API client with AAD token authentication, partition key range fanout, database/container listing, and paginated SQL query execution
+
+### Changed
+
+- Config moved from project-local `cosq.yaml` to `~/.config/cosq/config.yaml` (platform-appropriate via `dirs::config_dir()`), no longer pollutes project directories
+- Config now supports optional `database` and `container` fields (backward-compatible)
+- `cosq init` now accepts `--yes`/`-y` flag to auto-confirm prompts
+
 ## [0.2.0] - 2026-02-25
 
 ### Added

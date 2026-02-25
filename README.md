@@ -30,6 +30,15 @@ cosq auth login
 
 # Initialize with a Cosmos DB account
 cosq init
+
+# Run a query
+cosq query "SELECT * FROM c"
+
+# Override database/container
+cosq query "SELECT * FROM c" --db mydb --container users
+
+# Pipe-friendly (JSON to stdout, metadata to stderr)
+cosq query "SELECT c.name FROM c" -q | jq '.[].name'
 ```
 
 See [INSTALL.md](INSTALL.md) for all installation methods, shell completions, and platform-specific instructions.

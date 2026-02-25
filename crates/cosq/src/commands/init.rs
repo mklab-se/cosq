@@ -1,19 +1,21 @@
 //! Interactive initialization command
 //!
 //! Discovers Azure subscriptions and Cosmos DB accounts, then saves
-//! the selection to a local `cosq.yaml` config file.
+//! the selection to a local `cosq.yaml` config file. Also ensures
+//! the user has Cosmos DB data plane access (RBAC).
 
 use anyhow::{Context, Result, bail};
 use colored::Colorize;
 use cosq_client::arm::ArmClient;
 use cosq_client::auth::AzCliAuth;
 use cosq_core::config::{AccountConfig, Config};
-use dialoguer::FuzzySelect;
 use dialoguer::theme::ColorfulTheme;
+use dialoguer::{Confirm, FuzzySelect};
 
 pub struct InitArgs {
     pub account: Option<String>,
     pub subscription: Option<String>,
+    pub yes: bool,
 }
 
 pub async fn run(args: InitArgs) -> Result<()> {
@@ -127,7 +129,10 @@ pub async fn run(args: InitArgs) -> Result<()> {
         accounts.into_iter().nth(selection).unwrap()
     };
 
-    // Step 4: Save config
+    // Step 4: Ensure data plane access
+    ensure_data_plane_access(&arm, &account, args.yes).await?;
+
+    // Step 5: Save config
     let config = Config {
         account: AccountConfig {
             name: account.name.clone(),
@@ -135,10 +140,11 @@ pub async fn run(args: InitArgs) -> Result<()> {
             resource_group: account.resource_group.clone(),
             endpoint: account.endpoint.clone(),
         },
+        database: None,
+        container: None,
     };
 
-    let cwd = std::env::current_dir().context("failed to get current directory")?;
-    let config_path = config.save(&cwd)?;
+    let config_path = config.save()?;
 
     println!(
         "\n{} Saved configuration to {}",
@@ -147,6 +153,82 @@ pub async fn run(args: InitArgs) -> Result<()> {
     );
     println!("  {} {}", "Account:".bold(), account.name);
     println!("  {} {}", "Endpoint:".bold(), account.endpoint.dimmed());
+
+    Ok(())
+}
+
+/// Check if the user has Cosmos DB data plane access and offer to set it up.
+async fn ensure_data_plane_access(
+    arm: &ArmClient,
+    account: &cosq_client::arm::CosmosAccount,
+    auto_confirm: bool,
+) -> Result<()> {
+    println!("\n{}", "Checking data plane access...".dimmed());
+
+    let principal_id = AzCliAuth::get_principal_id().await?;
+
+    match arm.has_cosmos_data_role(&account.id, &principal_id).await {
+        Ok(true) => {
+            println!("  {} Data plane access is configured.", "OK".green().bold());
+            return Ok(());
+        }
+        Ok(false) => {
+            // No role assigned — offer to set it up
+        }
+        Err(e) => {
+            // Can't check (e.g. insufficient permissions) — warn and continue
+            println!(
+                "  {} Could not verify data plane access: {}",
+                "Warning:".yellow().bold(),
+                e
+            );
+            println!("  If queries fail, you may need to assign a Cosmos DB data plane role.");
+            return Ok(());
+        }
+    }
+
+    println!(
+        "\n{} Your account does not have Cosmos DB {} access.",
+        "!".yellow().bold(),
+        "data plane".bold()
+    );
+    println!(
+        "  This is required to run queries. cosq can assign the {} role for you.",
+        "Data Contributor".cyan()
+    );
+
+    let confirm = if auto_confirm {
+        true
+    } else {
+        Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt("Grant data plane access now?")
+            .default(true)
+            .interact()
+            .context("confirmation cancelled")?
+    };
+
+    if !confirm {
+        println!(
+            "\n  {} You can assign the role manually later:",
+            "Skipped.".yellow()
+        );
+        println!("  az cosmosdb sql role assignment create \\",);
+        println!("    --account-name {} \\", account.name);
+        println!("    --resource-group {} \\", account.resource_group);
+        println!("    --role-definition-id 00000000-0000-0000-0000-000000000002 \\");
+        println!("    --principal-id {principal_id} --scope /");
+        return Ok(());
+    }
+
+    arm.assign_cosmos_data_contributor(&account.id, &principal_id)
+        .await
+        .context("failed to assign data plane role")?;
+
+    println!("  {} Data plane access granted.", "OK".green().bold());
+    println!(
+        "  {} RBAC changes may take a few seconds to propagate.",
+        "Note:".dimmed()
+    );
 
     Ok(())
 }

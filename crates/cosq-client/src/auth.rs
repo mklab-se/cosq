@@ -143,6 +143,43 @@ impl AzCliAuth {
         Ok(())
     }
 
+    /// Get the signed-in user's principal (object) ID from Azure AD.
+    pub async fn get_principal_id() -> Result<String, ClientError> {
+        let output = Command::new("az")
+            .args([
+                "ad",
+                "signed-in-user",
+                "show",
+                "--query",
+                "id",
+                "--output",
+                "tsv",
+            ])
+            .output()
+            .await
+            .map_err(|e| {
+                ClientError::az_cli(
+                    format!("failed to run `az` command: {e}"),
+                    "Install the Azure CLI: https://aka.ms/install-azure-cli",
+                )
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(ClientError::az_cli(
+                format!("failed to get principal ID: {}", stderr.trim()),
+                "Try running `az login` to refresh your credentials",
+            ));
+        }
+
+        let id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if id.is_empty() {
+            return Err(ClientError::auth("received empty principal ID"));
+        }
+
+        Ok(id)
+    }
+
     /// Run `az logout`.
     pub async fn logout() -> Result<(), ClientError> {
         let status = Command::new("az")

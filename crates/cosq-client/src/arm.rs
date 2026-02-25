@@ -1,6 +1,6 @@
 //! Azure Resource Manager (ARM) client for discovering Cosmos DB accounts
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::auth::{ARM_RESOURCE, AzCliAuth};
@@ -83,10 +83,7 @@ impl ArmClient {
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
-            return Err(ClientError::Api {
-                status: status.as_u16(),
-                message: body,
-            });
+            return Err(ClientError::api(status.as_u16(), body));
         }
 
         let list: SubscriptionListResponse = resp.json().await?;
@@ -122,10 +119,7 @@ impl ArmClient {
                     "You may not have Reader access on this subscription. Check your Azure RBAC roles.",
                 ));
             }
-            return Err(ClientError::Api {
-                status: status.as_u16(),
-                message: body,
-            });
+            return Err(ClientError::api(status.as_u16(), body));
         }
 
         let list: CosmosAccountListResponse = resp.json().await?;
@@ -157,4 +151,112 @@ impl ArmClient {
         debug!(count = accounts.len(), "found Cosmos DB accounts");
         Ok(accounts)
     }
+
+    /// Check if a principal has any Cosmos DB SQL role assignment on the account.
+    pub async fn has_cosmos_data_role(
+        &self,
+        account_resource_id: &str,
+        principal_id: &str,
+    ) -> Result<bool, ClientError> {
+        debug!(principal_id, "checking Cosmos DB SQL role assignments");
+
+        let url = format!(
+            "{ARM_BASE_URL}{account_resource_id}/sqlRoleAssignments?api-version={COSMOS_DB_API_VERSION}"
+        );
+        let resp = self.http.get(&url).bearer_auth(&self.token).send().await?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(ClientError::api(status.as_u16(), body));
+        }
+
+        let list: SqlRoleAssignmentListResponse = resp.json().await?;
+        let has_role = list
+            .value
+            .iter()
+            .any(|a| a.properties.principal_id == principal_id);
+
+        debug!(has_role, "data plane role check complete");
+        Ok(has_role)
+    }
+
+    /// Assign the Cosmos DB Built-in Data Contributor role to a principal.
+    pub async fn assign_cosmos_data_contributor(
+        &self,
+        account_resource_id: &str,
+        principal_id: &str,
+    ) -> Result<(), ClientError> {
+        debug!(principal_id, "assigning Cosmos DB data contributor role");
+
+        let assignment_id = uuid::Uuid::new_v4().to_string();
+        let url = format!(
+            "{ARM_BASE_URL}{account_resource_id}/sqlRoleAssignments/{assignment_id}?api-version={COSMOS_DB_API_VERSION}"
+        );
+
+        let body = SqlRoleAssignmentCreateBody {
+            properties: SqlRoleAssignmentCreateProperties {
+                role_definition_id: format!(
+                    "{account_resource_id}/sqlRoleDefinitions/{COSMOS_DATA_CONTRIBUTOR_ROLE}"
+                ),
+                scope: account_resource_id.to_string(),
+                principal_id: principal_id.to_string(),
+            },
+        };
+
+        let resp = self
+            .http
+            .put(&url)
+            .bearer_auth(&self.token)
+            .json(&body)
+            .send()
+            .await?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let resp_body = resp.text().await.unwrap_or_default();
+            if status.as_u16() == 403 {
+                return Err(ClientError::forbidden(
+                    resp_body,
+                    "You need Owner or User Access Administrator role on the Cosmos DB account to assign data plane roles.",
+                ));
+            }
+            return Err(ClientError::api(status.as_u16(), resp_body));
+        }
+
+        debug!("data contributor role assigned successfully");
+        Ok(())
+    }
+}
+
+/// Cosmos DB Built-in Data Contributor role definition ID
+const COSMOS_DATA_CONTRIBUTOR_ROLE: &str = "00000000-0000-0000-0000-000000000002";
+
+#[derive(Debug, Deserialize)]
+struct SqlRoleAssignmentListResponse {
+    value: Vec<SqlRoleAssignment>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SqlRoleAssignment {
+    properties: SqlRoleAssignmentProperties,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SqlRoleAssignmentProperties {
+    principal_id: String,
+}
+
+#[derive(Debug, Serialize)]
+struct SqlRoleAssignmentCreateBody {
+    properties: SqlRoleAssignmentCreateProperties,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SqlRoleAssignmentCreateProperties {
+    role_definition_id: String,
+    scope: String,
+    principal_id: String,
 }
