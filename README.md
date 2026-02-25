@@ -16,63 +16,23 @@
   <a href="https://github.com/mklab-se/cosq/blob/main/LICENSE.md"><img src="https://img.shields.io/crates/l/cosq.svg" alt="License"></a>
 </p>
 
-## Installation
-
-### Homebrew (macOS / Linux)
+## Quick Start
 
 ```bash
+# Install (macOS / Linux)
 brew install mklab-se/tap/cosq
-```
 
-### Pre-built Binaries
-
-Download the latest binary for your platform from [GitHub Releases](https://github.com/mklab-se/cosq/releases/latest):
-
-| Platform | Archive |
-|---|---|
-| macOS (Apple Silicon) | `cosq-v*-aarch64-apple-darwin.tar.gz` |
-| macOS (Intel) | `cosq-v*-x86_64-apple-darwin.tar.gz` |
-| Linux (x86_64) | `cosq-v*-x86_64-unknown-linux-gnu.tar.gz` |
-| Windows (x86_64) | `cosq-v*-x86_64-pc-windows-msvc.zip` |
-
-Extract and move the binary to a directory in your `PATH`:
-
-```bash
-tar xzf cosq-v*-*.tar.gz
-sudo mv cosq /usr/local/bin/
-```
-
-### cargo install
-
-Compile from source via crates.io (requires Rust 1.85+):
-
-```bash
+# Or via cargo
 cargo install cosq
+
+# Login to Azure
+cosq auth login
+
+# Initialize with a Cosmos DB account
+cosq init
 ```
 
-### cargo binstall
-
-Download a pre-built binary via [cargo-binstall](https://github.com/cargo-bins/cargo-binstall):
-
-```bash
-cargo binstall cosq
-```
-
-### Build from Source
-
-```bash
-git clone https://github.com/mklab-se/cosq.git
-cd cosq
-cargo build --release
-```
-
-The binary is at `target/release/cosq`.
-
-## Verify Installation
-
-```bash
-cosq --version
-```
+See [INSTALL.md](INSTALL.md) for all installation methods, shell completions, and platform-specific instructions.
 
 ## Development
 

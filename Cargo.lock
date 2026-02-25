@@ -233,7 +233,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "cosq"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -255,7 +255,7 @@ dependencies = [
 
 [[package]]
 name = "cosq-client"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "cosq-core",
  "reqwest",
@@ -268,7 +268,7 @@ dependencies = [
 
 [[package]]
 name = "cosq-core"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "dirs",
  "serde",
