@@ -16,8 +16,8 @@ rust-version = "1.85"
 
 [workspace.dependencies]
 # Internal crates
-cosq-core = { path = "crates/cosq-core" }
-cosq-client = { path = "crates/cosq-client" }
+cosq-core = { path = "crates/cosq-core", version = "=0.2.0" }
+cosq-client = { path = "crates/cosq-client", version = "=0.2.0" }
 
 # CLI
 clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }

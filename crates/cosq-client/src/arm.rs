@@ -6,7 +6,8 @@ use tracing::debug;
 use crate::auth::{ARM_RESOURCE, AzCliAuth};
 use crate::error::ClientError;
 
-const ARM_API_VERSION: &str = "2024-11-15";
+const ARM_SUBSCRIPTIONS_API_VERSION: &str = "2024-11-01";
+const COSMOS_DB_API_VERSION: &str = "2025-04-15";
 const ARM_BASE_URL: &str = "https://management.azure.com";
 
 /// An Azure subscription
@@ -75,7 +76,7 @@ impl ArmClient {
     pub async fn list_subscriptions(&self) -> Result<Vec<Subscription>, ClientError> {
         debug!("listing Azure subscriptions");
 
-        let url = format!("{ARM_BASE_URL}/subscriptions?api-version={ARM_API_VERSION}");
+        let url = format!("{ARM_BASE_URL}/subscriptions?api-version={ARM_SUBSCRIPTIONS_API_VERSION}");
         let resp = self.http.get(&url).bearer_auth(&self.token).send().await?;
 
         let status = resp.status();
@@ -106,7 +107,7 @@ impl ArmClient {
         debug!(subscription_id, "listing Cosmos DB accounts");
 
         let url = format!(
-            "{ARM_BASE_URL}/subscriptions/{subscription_id}/providers/Microsoft.DocumentDB/databaseAccounts?api-version={ARM_API_VERSION}"
+            "{ARM_BASE_URL}/subscriptions/{subscription_id}/providers/Microsoft.DocumentDB/databaseAccounts?api-version={COSMOS_DB_API_VERSION}"
         );
 
         let resp = self.http.get(&url).bearer_auth(&self.token).send().await?;
