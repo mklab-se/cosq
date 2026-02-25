@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/cosq-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Kristofer Liljeblad <kristofer@mklab.se>"]
+license = "MIT"
+repository = "https://github.com/mklab-se/cosq"
+rust-version = "1.85"
+
+[workspace.dependencies]
+# CLI
+clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+
+# Async
+tokio = { version = "1.40", features = ["full"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Terminal
+colored = "2.1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -1,0 +1,34 @@
+[package]
+name = "cosq-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "A CLI to query your Azure Cosmos DB instances"
+readme = "../../README.md"
+keywords = ["azure", "cosmosdb", "cosmos", "cli", "query"]
+categories = ["command-line-utilities", "database"]
+
+[[bin]]
+name = "cosq"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+colored.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/cosq-v{ version }-{ target }.{ archive-format }"
+bin-dir = "cosq{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
