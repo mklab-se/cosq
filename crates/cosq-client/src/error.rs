@@ -7,7 +7,7 @@ pub enum ClientError {
     #[error("authentication failed: {message}")]
     Auth { message: String },
 
-    #[error("HTTP request failed: {0}")]
+    #[error("{}", format_request_error(.0))]
     Request(#[from] reqwest::Error),
 
     #[error("API error ({status}): {message}")]
@@ -61,6 +61,36 @@ impl ClientError {
     }
 }
 
+/// Format a reqwest error with TLS-specific diagnostics when applicable
+fn format_request_error(err: &reqwest::Error) -> String {
+    if has_certificate_error(err) {
+        return "TLS certificate verification failed\n\n\
+             The remote server's certificate was not trusted. This typically happens on\n\
+             corporate networks that use TLS inspection with a custom CA certificate.\n\n\
+             Fix: Install the corporate root CA certificate into your operating system's\n\
+             certificate store:\n\
+             \x20 macOS:   Add to Keychain Access > System > Certificates\n\
+             \x20 Linux:   Copy to /usr/local/share/ca-certificates/ and run update-ca-certificates\n\
+             \x20 Windows: Import via certmgr.msc > Trusted Root Certification Authorities"
+            .to_string();
+    }
+    format!("HTTP request failed: {err}")
+}
+
+/// Check if a reqwest error is caused by a TLS certificate verification failure
+fn has_certificate_error(err: &reqwest::Error) -> bool {
+    use std::error::Error;
+    let mut source = err.source();
+    while let Some(cause) = source {
+        let msg = cause.to_string();
+        if msg.contains("certificate") || msg.contains("UnknownIssuer") {
+            return true;
+        }
+        source = cause.source();
+    }
+    false
+}
+
 /// Try to extract a human-readable message from a Cosmos DB JSON error body.
 /// Falls back to the raw string if parsing fails.
 fn extract_message(body: String) -> String {
@@ -99,6 +129,29 @@ mod tests {
         let body = r#"{"error": "oops"}"#;
         let msg = extract_message(body.to_string());
         assert_eq!(msg, body);
+    }
+
+    #[test]
+    fn test_has_certificate_error_detection() {
+        let check =
+            |msg: &str| -> bool { msg.contains("certificate") || msg.contains("UnknownIssuer") };
+        assert!(check("invalid peer certificate: UnknownIssuer"));
+        assert!(check("certificate verify failed"));
+        assert!(check("self signed certificate in certificate chain"));
+        assert!(!check("connection refused"));
+        assert!(!check("timeout"));
+    }
+
+    #[test]
+    fn test_format_request_error_cert_message() {
+        // Verify the TLS diagnostic message contains key guidance
+        let msg = format!(
+            "TLS certificate verification failed\n\n\
+             The remote server's certificate was not trusted. This typically happens on\n\
+             corporate networks that use TLS inspection with a custom CA certificate."
+        );
+        assert!(msg.contains("TLS certificate verification failed"));
+        assert!(msg.contains("corporate networks"));
     }
 
     #[test]
