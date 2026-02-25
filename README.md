@@ -1,5 +1,11 @@
 # cosq
 
+[![CI](https://github.com/mklab-se/cosq/actions/workflows/ci.yml/badge.svg)](https://github.com/mklab-se/cosq/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/cosq-cli.svg)](https://crates.io/crates/cosq-cli)
+[![GitHub Release](https://img.shields.io/github/v/release/mklab-se/cosq)](https://github.com/mklab-se/cosq/releases/latest)
+[![Homebrew](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmklab-se%2Fhomebrew-tap%2Fmain%2FFormula%2Fcosq.rb&search=%5Cd%2B%5C.%5Cd%2B%5C.%5Cd%2B&label=homebrew&prefix=v&color=orange)](https://github.com/mklab-se/homebrew-tap/blob/main/Formula/cosq.rb)
+[![License](https://img.shields.io/crates/l/cosq-cli.svg)](https://github.com/mklab-se/cosq/blob/main/LICENSE.md)
+
 A CLI to query your Azure Cosmos DB instances from the command line.
 
 ## Installation
