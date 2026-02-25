@@ -1,5 +1,5 @@
 [package]
-name = "cosq-cli"
+name = "cosq"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

@@ -1,10 +1,10 @@
 # cosq
 
 [![CI](https://github.com/mklab-se/cosq/actions/workflows/ci.yml/badge.svg)](https://github.com/mklab-se/cosq/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/cosq-cli.svg)](https://crates.io/crates/cosq-cli)
+[![crates.io](https://img.shields.io/crates/v/cosq.svg)](https://crates.io/crates/cosq)
 [![GitHub Release](https://img.shields.io/github/v/release/mklab-se/cosq)](https://github.com/mklab-se/cosq/releases/latest)
 [![Homebrew](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmklab-se%2Fhomebrew-tap%2Fmain%2FFormula%2Fcosq.rb&search=%5Cd%2B%5C.%5Cd%2B%5C.%5Cd%2B&label=homebrew&prefix=v&color=orange)](https://github.com/mklab-se/homebrew-tap/blob/main/Formula/cosq.rb)
-[![License](https://img.shields.io/crates/l/cosq-cli.svg)](https://github.com/mklab-se/cosq/blob/main/LICENSE.md)
+[![License](https://img.shields.io/crates/l/cosq.svg)](https://github.com/mklab-se/cosq/blob/main/LICENSE.md)
 
 A CLI to query your Azure Cosmos DB instances from the command line.
 
@@ -39,7 +39,7 @@ sudo mv cosq /usr/local/bin/
 Compile from source via crates.io (requires Rust 1.85+):
 
 ```bash
-cargo install cosq-cli
+cargo install cosq
 ```
 
 ### cargo binstall
@@ -47,7 +47,7 @@ cargo install cosq-cli
 Download a pre-built binary via [cargo-binstall](https://github.com/cargo-bins/cargo-binstall):
 
 ```bash
-cargo binstall cosq-cli
+cargo binstall cosq
 ```
 
 ### Build from Source

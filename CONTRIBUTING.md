@@ -15,14 +15,14 @@ Thank you for considering contributing to cosq! This guide will help you get sta
 
 ```
 crates/
-  cosq-cli/       # CLI binary and command implementations
+  cosq/       # CLI binary and command implementations
 ```
 
 ### Running Tests
 
 ```bash
 cargo test                    # All tests
-cargo test -p cosq-cli        # Single crate
+cargo test -p cosq        # Single crate
 cargo test test_name          # Single test
 cargo clippy                  # Lint check
 ```

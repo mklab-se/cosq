@@ -197,7 +197,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      - name: Publish cosq-cli
-        run: cargo publish -p cosq-cli
+      - name: Publish cosq
+        run: cargo publish -p cosq
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

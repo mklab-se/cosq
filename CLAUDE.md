@@ -18,7 +18,7 @@ Rust workspace with a single crate (designed for expansion):
 
 ```
 crates/
-  cosq-cli/       # CLI binary (binary name: cosq, package name: cosq-cli)
+  cosq/           # CLI binary (package and binary name: cosq)
     src/
       main.rs     # Entry point, logging setup
       cli.rs      # Clap CLI definitions and command dispatch
