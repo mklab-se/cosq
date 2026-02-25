@@ -76,7 +76,8 @@ impl ArmClient {
     pub async fn list_subscriptions(&self) -> Result<Vec<Subscription>, ClientError> {
         debug!("listing Azure subscriptions");
 
-        let url = format!("{ARM_BASE_URL}/subscriptions?api-version={ARM_SUBSCRIPTIONS_API_VERSION}");
+        let url =
+            format!("{ARM_BASE_URL}/subscriptions?api-version={ARM_SUBSCRIPTIONS_API_VERSION}");
         let resp = self.http.get(&url).bearer_auth(&self.token).send().await?;
 
         let status = resp.status();
