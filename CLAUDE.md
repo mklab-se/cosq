@@ -14,15 +14,31 @@ cargo run -- --help      # Run the CLI
 
 ## Architecture
 
-Rust workspace with a single crate (designed for expansion):
+Rust workspace with three crates:
 
 ```
 crates/
-  cosq/           # CLI binary (package and binary name: cosq)
+  cosq/             # CLI binary (package and binary name: cosq)
     src/
-      main.rs     # Entry point, logging setup
-      cli.rs      # Clap CLI definitions and command dispatch
-      banner.rs   # ASCII art logo
+      main.rs       # Entry point, logging setup, background update check
+      cli.rs        # Clap CLI definitions and command dispatch
+      banner.rs     # ASCII art logo
+      update.rs     # Version update checker (queries crates.io, caches 24h)
+      commands/
+        mod.rs      # Command module exports
+        auth.rs     # `cosq auth` (status/login/logout)
+        completion.rs # `cosq completion` (bash/zsh/fish/powershell)
+        init.rs     # `cosq init` (interactive Cosmos DB account setup)
+  cosq-core/        # Core types and configuration
+    src/
+      lib.rs        # Module exports
+      config.rs     # cosq.yaml config format (load/save/find)
+  cosq-client/      # Azure Cosmos DB client and authentication
+    src/
+      lib.rs        # Module exports
+      auth.rs       # Azure CLI auth (token acquisition, login status)
+      arm.rs        # ARM discovery (subscriptions, Cosmos DB accounts)
+      error.rs      # ClientError types with helpful hints
 ```
 
 - **Workspace root** `Cargo.toml` defines shared dependencies and metadata
@@ -31,11 +47,15 @@ crates/
 
 ## Key Patterns
 
-- CLI built with `clap` derive macros
+- CLI built with `clap` derive macros + `clap_complete` for shell completions
 - Async runtime: `tokio`
 - Logging: `tracing` + `tracing-subscriber` with `-v`/`-vv` verbosity levels
 - Colored output via `colored` crate (respects `--no-color`)
-- Error handling: `anyhow`
+- Interactive prompts via `dialoguer` with fuzzy-select
+- Error handling: `anyhow` (CLI), `thiserror` (libraries)
+- Azure auth: delegates to `az` CLI for token acquisition
+- Config: `cosq.yaml` in project directory, searched up parent dirs
+- Update checker: background task, cached at `~/.cache/cosq/`, skip with `COSQ_NO_UPDATE_CHECK=1`
 
 ## Releasing
 

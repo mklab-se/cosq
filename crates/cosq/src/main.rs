@@ -6,6 +6,8 @@ use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 mod banner;
 mod cli;
+mod commands;
+mod update;
 
 use cli::Cli;
 
@@ -34,5 +36,19 @@ async fn main() -> Result<()> {
         colored::control::set_override(false);
     }
 
-    cli.run().await
+    // Spawn background update check (skip in quiet mode or if disabled via env)
+    let update_handle = if !cli.quiet && std::env::var("COSQ_NO_UPDATE_CHECK").is_err() {
+        Some(tokio::spawn(update::check_for_updates()))
+    } else {
+        None
+    };
+
+    let result = cli.run().await;
+
+    // Wait for update check to complete before exiting
+    if let Some(handle) = update_handle {
+        let _ = handle.await;
+    }
+
+    result
 }

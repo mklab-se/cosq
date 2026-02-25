@@ -29,19 +29,80 @@ pub struct Cli {
 
 #[derive(clap::Subcommand)]
 pub enum Commands {
+    /// Initialize cosq with a Cosmos DB account
+    Init {
+        /// Cosmos DB account name (skip interactive selection)
+        #[arg(long)]
+        account: Option<String>,
+
+        /// Azure subscription ID (skip interactive selection)
+        #[arg(long)]
+        subscription: Option<String>,
+    },
+
+    /// Manage Azure authentication
+    Auth {
+        #[command(subcommand)]
+        command: AuthCommands,
+    },
+
+    /// Generate shell completions
+    Completion {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
+
     /// Show version information
     Version,
+}
+
+#[derive(clap::Subcommand)]
+pub enum AuthCommands {
+    /// Show Azure CLI login status
+    Status,
+    /// Login to Azure (opens browser)
+    Login,
+    /// Logout from Azure
+    Logout,
+}
+
+#[derive(Clone, clap::ValueEnum)]
+pub enum Shell {
+    Bash,
+    Zsh,
+    Fish,
+    Powershell,
 }
 
 impl Cli {
     pub async fn run(self) -> Result<()> {
         match self.command {
+            Some(Commands::Init {
+                account,
+                subscription,
+            }) => {
+                crate::commands::init::run(crate::commands::init::InitArgs {
+                    account,
+                    subscription,
+                })
+                .await
+            }
+            Some(Commands::Auth { command }) => crate::commands::auth::run(command).await,
+            Some(Commands::Completion { shell }) => {
+                crate::commands::completion::generate_completions(shell);
+                Ok(())
+            }
             Some(Commands::Version) => {
                 crate::banner::print_banner_with_version();
                 Ok(())
             }
             None => {
-                crate::banner::print_banner_with_version();
+                // Show help when no subcommand is given
+                use clap::CommandFactory;
+                let mut cmd = Self::command();
+                cmd.print_help()?;
+                println!();
                 Ok(())
             }
         }
