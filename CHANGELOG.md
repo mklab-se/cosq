@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.1] - 2026-02-26
+
+### Fixed
+
+- **Arrow key navigation in interactive prompts** — replaced `dialoguer` with `inquire` (uses `crossterm` for terminal I/O). Arrow keys now work reliably for navigating selection lists instead of displaying "A"/"B" characters
+- **Query generation clarification loop** — when the AI returns a `.cosq` file that fails to parse, cosq now auto-retries with the parse error instead of showing the raw file content and asking "Your answer:" with no visible question
+- **Removed "The AI needs clarification" phrasing** — cosq no longer refers to AI as a separate entity; clarification questions are shown directly
+
+### Added
+
+- **`cosq ai status` command** — shows the current AI provider configuration (provider, model, account, deployment, endpoint)
+
 ## [0.6.0] - 2026-02-26
 
 ### Added
