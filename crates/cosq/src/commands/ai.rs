@@ -58,13 +58,12 @@ async fn init() -> Result<()> {
 
     eprintln!("{}", "Select an AI provider for query generation:".bold());
 
-    let selection = dialoguer::FuzzySelect::with_theme(&dialoguer::theme::ColorfulTheme::default())
-        .items(&items)
-        .default(0)
-        .interact()
+    let selection = inquire::Select::new("Select an AI provider:", items.clone())
+        .prompt()
         .context("selection cancelled")?;
 
-    let provider = &available[selection];
+    let idx = items.iter().position(|i| i == &selection).unwrap();
+    let provider = &available[idx];
 
     // Provider-specific setup
     let ai_config = match provider {
@@ -109,10 +108,9 @@ async fn setup_local_agent(provider: &AiProvider) -> Result<AiConfig> {
         default_model.cyan()
     );
 
-    let model: String = dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
-        .with_prompt("Model")
-        .default(default_model.to_string())
-        .interact_text()
+    let model: String = inquire::Text::new("Model:")
+        .with_default(default_model)
+        .prompt()
         .context("input cancelled")?;
 
     Ok(AiConfig {
@@ -160,19 +158,17 @@ async fn setup_ollama() -> Result<AiConfig> {
 
     eprintln!("  Select a model:");
 
-    let selection = dialoguer::FuzzySelect::with_theme(&dialoguer::theme::ColorfulTheme::default())
-        .items(&items)
-        .default(0)
-        .interact()
+    let selection = inquire::Select::new("Select a model:", items.clone())
+        .prompt()
         .context("selection cancelled")?;
 
-    let model_name = &models[selection].name;
+    let idx = items.iter().position(|i| i == &selection).unwrap();
+    let model_name = &models[idx].name;
 
     // Ask for custom Ollama URL
-    let url: String = dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
-        .with_prompt("Ollama URL")
-        .default("http://localhost:11434".to_string())
-        .interact_text()
+    let url: String = inquire::Text::new("Ollama URL:")
+        .with_default("http://localhost:11434")
+        .prompt()
         .context("input cancelled")?;
 
     let ollama_url = if url == "http://localhost:11434" {
@@ -202,16 +198,13 @@ fn setup_azure_openai() -> Result<AiConfig> {
          \x20 your Azure AI Services or Azure OpenAI resource."
     );
 
-    let account: String = dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
-        .with_prompt("Azure OpenAI account name")
-        .interact_text()
+    let account: String = inquire::Text::new("Azure OpenAI account name:")
+        .prompt()
         .context("input cancelled")?;
 
-    let deployment: String =
-        dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
-            .with_prompt("Model deployment name (e.g., gpt-4o-mini)")
-            .interact_text()
-            .context("input cancelled")?;
+    let deployment: String = inquire::Text::new("Model deployment name (e.g., gpt-4o-mini):")
+        .prompt()
+        .context("input cancelled")?;
 
     Ok(AiConfig {
         provider: AiProvider::AzureOpenai,

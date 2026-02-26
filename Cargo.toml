@@ -40,7 +40,7 @@ thiserror = "2.0"
 
 # Terminal
 colored = "2.1"
-dialoguer = { version = "0.11", features = ["fuzzy-select"] }
+inquire = "0.7"
 
 # Logging
 tracing = "0.1"

@@ -10,8 +10,7 @@ use colored::Colorize;
 use cosq_client::cosmos::CosmosClient;
 use cosq_core::config::Config;
 use cosq_core::stored_query::{StoredQuery, find_stored_query, list_stored_queries};
-use dialoguer::theme::ColorfulTheme;
-use dialoguer::{FuzzySelect, Input};
+use inquire::{Confirm, Select, Text};
 use serde_json::Value;
 
 use super::common;
@@ -214,10 +213,9 @@ async fn render_with_ai_recovery(
             let ai_config = config.as_ref().and_then(|c| c.ai.clone());
 
             if let Some(ai) = ai_config {
-                let fix = dialoguer::Confirm::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Would you like AI to fix this?")
-                    .default(true)
-                    .interact()
+                let fix = Confirm::new("Would you like AI to fix this?")
+                    .with_default(true)
+                    .prompt()
                     .unwrap_or(false);
 
                 if fix {
@@ -289,10 +287,9 @@ async fn fix_template_with_ai(
 
             // Offer to save the fix
             if query.metadata.template.is_some() {
-                let save = dialoguer::Confirm::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Save the fixed template to the query file?")
-                    .default(true)
-                    .interact()
+                let save = Confirm::new("Save the fixed template to the query file?")
+                    .with_default(true)
+                    .prompt()
                     .unwrap_or(false);
 
                 if save {
@@ -363,14 +360,12 @@ fn pick_query_interactive() -> Result<StoredQuery> {
         })
         .collect();
 
-    let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-        .with_prompt("Select a stored query")
-        .items(&display_items)
-        .default(0)
-        .interact()
+    let selection = Select::new("Select a stored query:", display_items.clone())
+        .prompt()
         .context("query selection cancelled")?;
 
-    Ok(queries.into_iter().nth(selection).unwrap())
+    let idx = display_items.iter().position(|d| d == &selection).unwrap();
+    Ok(queries.into_iter().nth(idx).unwrap())
 }
 
 /// Parse --key value pairs from the raw parameter strings.
@@ -425,14 +420,15 @@ fn resolve_params_interactive(
                 param.name.clone()
             };
 
-            let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-                .with_prompt(&prompt)
-                .items(&choice_strs)
-                .default(default_idx)
-                .interact()
-                .context("parameter selection cancelled")?;
+            let select_prompt = format!("{prompt}:");
+            let mut select = Select::new(&select_prompt, choice_strs.clone());
+            if default_idx < choice_strs.len() {
+                select = select.with_starting_cursor(default_idx);
+            }
+            let selected = select.prompt().context("parameter selection cancelled")?;
 
-            choices[selection].clone()
+            let idx = choice_strs.iter().position(|c| c == &selected).unwrap();
+            choices[idx].clone()
         } else if param.is_required() || param.default.is_some() {
             let prompt = if let Some(ref desc) = param.description {
                 format!("{} ({})", param.name, desc)
@@ -445,19 +441,12 @@ fn resolve_params_interactive(
                 other => other.to_string(),
             });
 
-            let theme = ColorfulTheme::default();
-            let raw = if let Some(def) = default_str {
-                Input::<String>::with_theme(&theme)
-                    .with_prompt(&prompt)
-                    .default(def)
-                    .interact_text()
-                    .context("input cancelled")?
-            } else {
-                Input::<String>::with_theme(&theme)
-                    .with_prompt(&prompt)
-                    .interact_text()
-                    .context("input cancelled")?
-            };
+            let text_prompt = format!("{prompt}:");
+            let mut text = Text::new(&text_prompt);
+            if let Some(ref def) = default_str {
+                text = text.with_default(def);
+            }
+            let raw = text.prompt().context("input cancelled")?;
 
             cosq_core::stored_query::parse_param_value_public(&param.name, &param.param_type, &raw)?
         } else {

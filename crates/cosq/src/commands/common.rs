@@ -7,8 +7,7 @@ use anyhow::{Context, Result, bail};
 use colored::Colorize;
 use cosq_client::cosmos::CosmosClient;
 use cosq_core::config::Config;
-use dialoguer::FuzzySelect;
-use dialoguer::theme::ColorfulTheme;
+use inquire::Select;
 
 /// Resolve which database to target.
 ///
@@ -42,13 +41,9 @@ pub async fn resolve_database(
         eprintln!("{} {}", "Using database:".bold(), databases[0].green());
         databases[0].clone()
     } else {
-        let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select a database")
-            .items(&databases)
-            .default(0)
-            .interact()
-            .context("database selection cancelled")?;
-        databases[selection].clone()
+        Select::new("Select a database:", databases.clone())
+            .prompt()
+            .context("database selection cancelled")?
     };
 
     config.database = Some(db.clone());
@@ -85,13 +80,9 @@ pub async fn resolve_container(
         eprintln!("{} {}", "Using container:".bold(), containers[0].green());
         containers[0].clone()
     } else {
-        let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select a container")
-            .items(&containers)
-            .default(0)
-            .interact()
-            .context("container selection cancelled")?;
-        containers[selection].clone()
+        Select::new("Select a container:", containers.clone())
+            .prompt()
+            .context("container selection cancelled")?
     };
 
     config.container = Some(ctr.clone());

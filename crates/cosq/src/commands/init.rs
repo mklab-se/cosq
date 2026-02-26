@@ -9,8 +9,7 @@ use colored::Colorize;
 use cosq_client::arm::ArmClient;
 use cosq_client::auth::AzCliAuth;
 use cosq_core::config::{AccountConfig, Config};
-use dialoguer::theme::ColorfulTheme;
-use dialoguer::{Confirm, FuzzySelect};
+use inquire::{Confirm, Select};
 
 pub struct InitArgs {
     pub account: Option<String>,
@@ -63,14 +62,12 @@ pub async fn run(args: InitArgs) -> Result<()> {
                 .map(|s| format!("{} ({})", s.display_name, s.subscription_id))
                 .collect();
 
-            let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-                .with_prompt("Select a subscription")
-                .items(&labels)
-                .default(0)
-                .interact()
+            let selection = Select::new("Select a subscription:", labels.clone())
+                .prompt()
                 .context("subscription selection cancelled")?;
 
-            let sub = &subs[selection];
+            let idx = labels.iter().position(|l| l == &selection).unwrap();
+            let sub = &subs[idx];
             println!("  {} {}", "Selected:".dimmed(), sub.display_name.green());
             sub.subscription_id.clone()
         }
@@ -117,16 +114,14 @@ pub async fn run(args: InitArgs) -> Result<()> {
             })
             .collect();
 
-        let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select a Cosmos DB account")
-            .items(&labels)
-            .default(0)
-            .interact()
+        let selection = Select::new("Select a Cosmos DB account:", labels.clone())
+            .prompt()
             .context("account selection cancelled")?;
 
-        let acct = &accounts[selection];
+        let idx = labels.iter().position(|l| l == &selection).unwrap();
+        let acct = &accounts[idx];
         println!("  {} {}", "Selected:".dimmed(), acct.name.green());
-        accounts.into_iter().nth(selection).unwrap()
+        accounts.into_iter().nth(idx).unwrap()
     };
 
     // Step 4: Ensure data plane access
@@ -201,10 +196,9 @@ async fn ensure_data_plane_access(
     let confirm = if auto_confirm {
         true
     } else {
-        Confirm::with_theme(&ColorfulTheme::default())
-            .with_prompt("Grant data plane access now?")
-            .default(true)
-            .interact()
+        Confirm::new("Grant data plane access now?")
+            .with_default(true)
+            .prompt()
             .context("confirmation cancelled")?
     };
 

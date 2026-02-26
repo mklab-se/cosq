@@ -32,7 +32,7 @@ reqwest.workspace = true
 semver.workspace = true
 chrono.workspace = true
 dirs.workspace = true
-dialoguer.workspace = true
+inquire.workspace = true
 minijinja.workspace = true
 comfy-table.workspace = true
 

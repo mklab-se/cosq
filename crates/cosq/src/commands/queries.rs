@@ -125,11 +125,11 @@ fn delete(name: &str, yes: bool) -> Result<()> {
     let path = find_query_path(name)?;
 
     if !yes {
-        let confirm = dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
-            .with_prompt(format!("Delete query '{name}' at {}?", path.display()))
-            .default(false)
-            .interact()
-            .context("confirmation cancelled")?;
+        let confirm =
+            inquire::Confirm::new(&format!("Delete query '{name}' at {}?", path.display()))
+                .with_default(false)
+                .prompt()
+                .context("confirmation cancelled")?;
 
         if !confirm {
             println!("Cancelled.");
@@ -280,9 +280,8 @@ async fn generate(
         desc
     } else {
         eprintln!();
-        dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
-            .with_prompt("Describe the query you want to generate")
-            .interact_text()
+        inquire::Text::new("Describe the query you want to generate:")
+            .prompt()
             .context("input cancelled")?
     };
 
@@ -326,11 +325,9 @@ async fn generate(
                 }
                 eprintln!();
 
-                let answer: String =
-                    dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
-                        .with_prompt("Your answer")
-                        .interact_text()
-                        .context("input cancelled")?;
+                let answer: String = inquire::Text::new("Your answer:")
+                    .prompt()
+                    .context("input cancelled")?;
 
                 conversation_prompt = format!(
                     "Original request: {description}\n\n\
@@ -381,10 +378,9 @@ async fn generate(
     show_query_preview(&query, &suggested_name);
 
     // Ask for name (or accept suggestion)
-    let name: String = dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
-        .with_prompt("Query name")
-        .default(suggested_name)
-        .interact_text()
+    let name: String = inquire::Text::new("Query name:")
+        .with_default(&suggested_name)
+        .prompt()
         .context("input cancelled")?;
 
     query.name = name.clone();
@@ -400,12 +396,11 @@ async fn generate(
     println!("{} Saved to {}", "OK".green().bold(), path.display());
 
     // Offer to run or edit
-    let action = dialoguer::FuzzySelect::with_theme(&dialoguer::theme::ColorfulTheme::default())
-        .with_prompt("What next?")
-        .items(&["Run it now", "Open in editor", "Done"])
-        .default(0)
-        .interact()
+    let options = vec!["Run it now", "Open in editor", "Done"];
+    let action_str = inquire::Select::new("What next?", options.clone())
+        .prompt()
         .context("selection cancelled")?;
+    let action = options.iter().position(|o| *o == action_str).unwrap();
 
     match action {
         0 => {
@@ -451,40 +446,28 @@ async fn pick_containers_interactive(
     }
 
     // Ask if single or multi-container
-    let mode = dialoguer::FuzzySelect::with_theme(&dialoguer::theme::ColorfulTheme::default())
-        .with_prompt("Query scope")
-        .items(&["Single container", "Multiple containers (multi-step query)"])
-        .default(0)
-        .interact()
+    let scope_options = vec!["Single container", "Multiple containers (multi-step query)"];
+    let mode = inquire::Select::new("Query scope:", scope_options)
+        .prompt()
         .context("selection cancelled")?;
 
-    if mode == 0 {
+    if mode == "Single container" {
         // Single container
-        let selection =
-            dialoguer::FuzzySelect::with_theme(&dialoguer::theme::ColorfulTheme::default())
-                .with_prompt("Select a container")
-                .items(&all_containers)
-                .default(0)
-                .interact()
-                .context("container selection cancelled")?;
-        Ok(vec![all_containers[selection].clone()])
+        let selection = inquire::Select::new("Select a container:", all_containers.clone())
+            .prompt()
+            .context("container selection cancelled")?;
+        Ok(vec![selection])
     } else {
         // Multi-select containers
-        let selections =
-            dialoguer::MultiSelect::with_theme(&dialoguer::theme::ColorfulTheme::default())
-                .with_prompt("Select containers (Space to toggle, Enter to confirm)")
-                .items(&all_containers)
-                .interact()
-                .context("container selection cancelled")?;
+        let selections = inquire::MultiSelect::new("Select containers:", all_containers.clone())
+            .prompt()
+            .context("container selection cancelled")?;
 
         if selections.is_empty() {
             bail!("No containers selected.");
         }
 
-        let selected: Vec<String> = selections
-            .into_iter()
-            .map(|i| all_containers[i].clone())
-            .collect();
+        let selected: Vec<String> = selections;
 
         for ctr in &selected {
             eprintln!("  {} {}", "▸".dimmed(), ctr.green());
