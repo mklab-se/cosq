@@ -22,8 +22,10 @@ pub async fn run(cmd: QueriesCommands, quiet: bool) -> Result<()> {
         QueriesCommands::Show { name } => show(&name),
         QueriesCommands::Generate {
             description,
+            db,
+            container,
             project,
-        } => generate(&description, project, quiet).await,
+        } => generate(description, db, container, project, quiet).await,
     }
 }
 
@@ -223,97 +225,150 @@ fn show(name: &str) -> Result<()> {
     Ok(())
 }
 
-async fn generate(description: &str, project: bool, quiet: bool) -> Result<()> {
-    let config = Config::load()?;
+async fn generate(
+    description: Option<String>,
+    cli_db: Option<String>,
+    cli_container: Option<String>,
+    project: bool,
+    quiet: bool,
+) -> Result<()> {
+    let mut config = Config::load()?;
 
-    let ai_config = config.ai.as_ref().ok_or_else(|| {
+    let ai_config = config.ai.clone().ok_or_else(|| {
         anyhow::anyhow!("AI is not configured. Run `cosq ai init` to set up an AI provider.")
     })?;
+
+    // --- Step 1-2: Resolve database and container ---
+    let client = cosq_client::cosmos::CosmosClient::new(&config.account.endpoint).await?;
+
+    let (database, db_changed) =
+        super::common::resolve_database(&client, &mut config, cli_db, None).await?;
+    let (container, ctr_changed) =
+        super::common::resolve_container(&client, &mut config, &database, cli_container, None)
+            .await?;
+
+    if db_changed || ctr_changed {
+        config.save()?;
+    }
+
+    // --- Step 3: Sample documents for schema context ---
+    if !quiet {
+        eprintln!(
+            "{}",
+            format!("Sampling documents from {container}...").dimmed()
+        );
+    }
+    let sample_result = client
+        .query(&database, &container, "SELECT TOP 3 * FROM c")
+        .await
+        .context("failed to sample documents for schema context")?;
+
+    let sample_json = if sample_result.documents.is_empty() {
+        "(container is empty — no sample documents available)".to_string()
+    } else {
+        format_sample_documents(&sample_result.documents)
+    };
+
+    // --- Step 4: Get description (from arg or interactive prompt) ---
+    let description = if let Some(desc) = description {
+        desc
+    } else {
+        eprintln!();
+        dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
+            .with_prompt("Describe the query you want to generate")
+            .interact_text()
+            .context("input cancelled")?
+    };
+
+    // --- Step 5-6: Build prompt and call AI (with conversation loop) ---
+    let system_prompt = build_system_prompt(&database, &container, &sample_json);
+
+    let user_prompt = format!("Generate a .cosq stored query for: {description}");
 
     if !quiet {
         eprintln!(
             "{}",
-            format!(
-                "Generating stored query via {}...",
-                ai_config.provider.display_name()
-            )
-            .dimmed()
+            format!("Generating via {}...", ai_config.provider.display_name()).dimmed()
         );
     }
 
-    let system_prompt = r#"You are a Cosmos DB SQL query generator. Generate a stored query in .cosq format.
+    let mut conversation_prompt = user_prompt;
+    let mut query = None;
+    let max_rounds = 3;
 
-The .cosq format uses YAML front matter between --- delimiters, followed by the SQL query.
+    for round in 0..max_rounds {
+        let response =
+            cosq_client::ai::generate_text(&ai_config, &system_prompt, &conversation_prompt)
+                .await
+                .context("failed to generate query")?;
 
-Rules:
-- Use 'c' as the alias for the container (e.g., SELECT * FROM c)
-- Use Cosmos DB SQL syntax (not ANSI SQL). Use TOP instead of LIMIT.
-- Extract variable parts as parameters using @param syntax in the SQL
-- Parameters must be defined in the params section with name, type (string/number/bool), description, and optional default/choices
-- Generate a clear, concise description field
-- If the query returns tabular data, include a MiniJinja template that presents results clearly
-- The template uses {{ variable }} syntax and {% for doc in documents %} loops
-- Template has access to 'documents' (array of results) and all parameter values
-- Respond with ONLY the .cosq file content, no explanation or markdown fences
+        let content = strip_markdown_fences(&response);
 
-Example output:
----
-description: Find active users by role
-params:
-  - name: role
-    type: string
-    description: User role to filter by
-    choices: ["admin", "editor", "viewer"]
-    default: "viewer"
-  - name: limit
-    type: number
-    description: Maximum results
-    default: 20
-    min: 1
-    max: 100
-template: |
-  {{ role | capitalize }} users:
-  {% for doc in documents %}
-  - {{ doc.displayName }} ({{ doc.email }})
-  {% endfor %}
-  Total: {{ documents | length }}
----
-SELECT TOP @limit c.id, c.displayName, c.email, c.role
-FROM c
-WHERE c.role = @role AND c.status = "active"
-ORDER BY c.displayName
-"#;
+        // Try to parse as a .cosq query
+        match StoredQuery::parse("generated", &content) {
+            Ok(parsed) => {
+                query = Some(parsed);
+                break;
+            }
+            Err(_) if round < max_rounds - 1 => {
+                // AI is asking clarifying questions — show them and get answers
+                eprintln!("\n{}", "The AI needs clarification:".bold());
+                for line in content.lines() {
+                    if !line.trim().is_empty() {
+                        eprintln!("  {}", line);
+                    }
+                }
+                eprintln!();
 
-    let user_prompt = format!("Generate a .cosq stored query for: {description}");
+                let answer: String =
+                    dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
+                        .with_prompt("Your answer")
+                        .interact_text()
+                        .context("input cancelled")?;
 
-    let response = cosq_client::ai::generate_text(ai_config, system_prompt, &user_prompt)
-        .await
-        .context("failed to generate query")?;
+                // Build follow-up prompt with full context
+                conversation_prompt = format!(
+                    "Original request: {description}\n\n\
+                     You asked:\n{content}\n\n\
+                     User answered: {answer}\n\n\
+                     Now generate the .cosq file."
+                );
 
-    // Clean up response (strip markdown fences if present)
-    let content = response
-        .trim()
-        .strip_prefix("```yaml")
-        .or_else(|| response.trim().strip_prefix("```"))
-        .unwrap_or(response.trim())
-        .strip_suffix("```")
-        .unwrap_or(response.trim())
-        .trim();
+                if !quiet {
+                    eprintln!(
+                        "{}",
+                        format!("Generating via {}...", ai_config.provider.display_name()).dimmed()
+                    );
+                }
+            }
+            Err(_) => {
+                bail!(
+                    "AI did not produce a valid query after {max_rounds} attempts. \
+                     Try rephrasing your description or run with more detail."
+                );
+            }
+        }
+    }
 
-    // Validate the generated query parses correctly
-    let mut query = StoredQuery::parse("generated", content)
-        .context("AI generated an invalid query file. Try rephrasing your description.")?;
+    let mut query = query.ok_or_else(|| {
+        anyhow::anyhow!("AI did not produce a valid query. Try rephrasing your description.")
+    })?;
 
-    // Add AI metadata with provider and model info
+    // --- Step 7: Finalize and save ---
+
+    // Auto-populate database and container metadata
+    query.metadata.database = Some(database);
+    query.metadata.container = Some(container);
+
+    // Add AI provenance
     let provider_info = match ai_config.effective_model() {
         Some(model) => format!("{} ({})", ai_config.provider.display_name(), model),
         None => ai_config.provider.display_name().to_string(),
     };
     query.metadata.generated_by = Some(provider_info);
-    query.metadata.generated_from = Some(description.to_string());
+    query.metadata.generated_from = Some(description.clone());
 
-    // Generate a filename from the description
-    let suggested_name = generate_filename(description);
+    let suggested_name = generate_filename(&description);
 
     // Show preview
     eprintln!("\n{}", "Generated query:".bold());
@@ -326,12 +381,28 @@ ORDER BY c.displayName
     if !query.metadata.params.is_empty() {
         eprintln!("  {}:", "Parameters".dimmed());
         for p in &query.metadata.params {
-            eprintln!("    --{} <{}>", p.name, p.param_type);
+            let default_str = p
+                .default
+                .as_ref()
+                .map(|d| format!(" (default: {d})"))
+                .unwrap_or_default();
+            eprintln!(
+                "    --{} <{}>{}",
+                p.name,
+                p.param_type,
+                default_str.dimmed()
+            );
         }
     }
     eprintln!("\n  {}:", "SQL".dimmed());
     for line in query.sql.lines() {
         eprintln!("    {}", line.cyan());
+    }
+    if let Some(ref tmpl) = query.metadata.template {
+        eprintln!("\n  {}:", "Template".dimmed());
+        for line in tmpl.lines() {
+            eprintln!("    {}", line);
+        }
     }
 
     // Ask for name (or accept suggestion)
@@ -365,6 +436,120 @@ ORDER BY c.displayName
     }
 
     Ok(())
+}
+
+/// Build the system prompt with schema context from sampled documents.
+fn build_system_prompt(database: &str, container: &str, sample_json: &str) -> String {
+    format!(
+        r#"You are a Cosmos DB SQL query generator. You create .cosq stored query files.
+
+TARGET:
+  Database:  "{database}"
+  Container: "{container}"
+
+SAMPLE DOCUMENTS from this container:
+{sample_json}
+
+FORMAT — .cosq files use YAML front matter between --- delimiters, followed by the SQL query.
+
+SQL RULES:
+- ONLY reference fields that exist in the sample documents above
+- Use 'c' as the container alias (e.g., SELECT * FROM c)
+- Use Cosmos DB SQL syntax (TOP not LIMIT, no OFFSET, use DateTimeAdd/GetCurrentDateTime for dates)
+- Extract variable parts as @param parameters
+- Parameters: define in params section with name, type (string/number/bool), description, and optional default/choices/min/max
+- Set database and container in the YAML metadata
+
+OUTPUT TEMPLATE RULES — ALWAYS include a MiniJinja template in the .cosq file:
+- Templates use {{{{ variable }}}} syntax and {{% for doc in documents %}} loops
+- Templates have access to 'documents' (array of results) and all parameter values
+
+Choose the template style based on the query:
+- MULTIPLE results (lists, searches, TOP N where N > 1): use a readable table layout
+  Example:
+    {{% for doc in documents %}}
+    {{{{ doc.displayName | truncate(25) }}}}  {{{{ doc.email }}}}  {{{{ doc.status }}}}
+    {{% endfor %}}
+    Total: {{{{ documents | length }}}}
+
+- SINGLE result (TOP 1, lookup by ID, "latest", "last"): use a property-value layout
+  Example:
+    {{% for doc in documents %}}
+    Name:    {{{{ doc.name }}}}
+    Email:   {{{{ doc.email }}}}
+    Status:  {{{{ doc.status }}}}
+    {{% endfor %}}
+
+- If the user mentions "JSON" output: do NOT include a template field at all
+- If the user mentions "CSV" output: create a template with a header row and comma-separated values
+- For complex nested documents: format nested objects and arrays readably (indented sub-properties, bullet lists for arrays)
+- When in doubt, pick the format that makes the data most readable
+
+CONVERSATION RULES:
+- Be CONFIDENT. If you can make a reasonable assumption, make it and generate the query.
+- Only ask clarifying questions if the description is genuinely ambiguous (e.g., which field to filter on, or the user mentions something not in the schema)
+- When asking questions, ask 1-3 short questions. Do NOT generate a .cosq file in the same response.
+- When generating, respond with ONLY the .cosq file content — no explanation, no markdown fences."#
+    )
+}
+
+/// Strip markdown code fences from AI responses.
+fn strip_markdown_fences(response: &str) -> String {
+    let trimmed = response.trim();
+    let stripped = trimmed
+        .strip_prefix("```yaml")
+        .or_else(|| trimmed.strip_prefix("```cosq"))
+        .or_else(|| trimmed.strip_prefix("```"))
+        .unwrap_or(trimmed);
+    let stripped = stripped.strip_suffix("```").unwrap_or(stripped);
+    stripped.trim().to_string()
+}
+
+/// Format sample documents for inclusion in the AI prompt.
+/// Truncates large values to keep the prompt size reasonable.
+fn format_sample_documents(docs: &[serde_json::Value]) -> String {
+    let truncated: Vec<serde_json::Value> = docs.iter().map(truncate_for_prompt).collect();
+
+    // Try with all docs first
+    if let Ok(json) = serde_json::to_string_pretty(&truncated) {
+        if json.len() <= 4000 {
+            return json;
+        }
+    }
+
+    // Reduce to fewer documents if too large
+    for n in (1..truncated.len()).rev() {
+        if let Ok(json) = serde_json::to_string_pretty(&truncated[..n]) {
+            if json.len() <= 4000 {
+                return format!("{json}\n(showing {n} of {} sampled documents)", docs.len());
+            }
+        }
+    }
+
+    // Even one document is too big — serialize truncated version
+    serde_json::to_string_pretty(&truncated[..1])
+        .unwrap_or_else(|_| "(documents too large to display)".to_string())
+}
+
+/// Recursively truncate a JSON value for prompt inclusion.
+/// Shortens long strings and large arrays while preserving schema structure.
+fn truncate_for_prompt(value: &serde_json::Value) -> serde_json::Value {
+    use serde_json::Value;
+    match value {
+        Value::String(s) if s.len() > 100 => Value::String(format!("{}...", &s[..80])),
+        Value::Array(arr) if arr.len() > 3 => {
+            let mut truncated: Vec<Value> = arr[..3].iter().map(truncate_for_prompt).collect();
+            truncated.push(Value::String(format!("... ({} items total)", arr.len())));
+            Value::Array(truncated)
+        }
+        Value::Array(arr) => Value::Array(arr.iter().map(truncate_for_prompt).collect()),
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(k, v)| (k.clone(), truncate_for_prompt(v)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
 }
 
 /// Generate a kebab-case filename from a natural language description
@@ -477,5 +662,63 @@ mod tests {
     fn test_generate_filename_empty_input() {
         let name = generate_filename("users");
         assert_eq!(name, "users");
+    }
+
+    #[test]
+    fn test_strip_markdown_fences_yaml() {
+        let input = "```yaml\n---\ndescription: test\n---\nSELECT * FROM c\n```";
+        assert_eq!(
+            strip_markdown_fences(input),
+            "---\ndescription: test\n---\nSELECT * FROM c"
+        );
+    }
+
+    #[test]
+    fn test_strip_markdown_fences_plain() {
+        let input = "```\nsome content\n```";
+        assert_eq!(strip_markdown_fences(input), "some content");
+    }
+
+    #[test]
+    fn test_strip_markdown_fences_no_fences() {
+        let input = "---\ndescription: test\n---\nSELECT * FROM c";
+        assert_eq!(strip_markdown_fences(input), input);
+    }
+
+    #[test]
+    fn test_truncate_for_prompt_short_values() {
+        use serde_json::json;
+        let value = json!({"name": "short", "count": 42});
+        let result = truncate_for_prompt(&value);
+        assert_eq!(result, value);
+    }
+
+    #[test]
+    fn test_truncate_for_prompt_long_string() {
+        use serde_json::json;
+        let long = "x".repeat(200);
+        let value = json!({"content": long});
+        let result = truncate_for_prompt(&value);
+        let content = result["content"].as_str().unwrap();
+        assert!(content.len() < 200);
+        assert!(content.ends_with("..."));
+    }
+
+    #[test]
+    fn test_truncate_for_prompt_large_array() {
+        use serde_json::json;
+        let value = json!({"items": [1, 2, 3, 4, 5, 6, 7]});
+        let result = truncate_for_prompt(&value);
+        let items = result["items"].as_array().unwrap();
+        assert_eq!(items.len(), 4); // 3 items + "... (7 items total)"
+    }
+
+    #[test]
+    fn test_format_sample_documents() {
+        use serde_json::json;
+        let docs = vec![json!({"id": "1", "name": "test"})];
+        let formatted = format_sample_documents(&docs);
+        assert!(formatted.contains("\"id\": \"1\""));
+        assert!(formatted.contains("\"name\": \"test\""));
     }
 }

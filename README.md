@@ -65,14 +65,20 @@ cosq run
 
 ## AI Query Generation
 
-Generate stored queries from natural language using your preferred AI provider:
+Generate stored queries from natural language — the AI samples your actual documents for field-accurate SQL and auto-generates output templates:
 
 ```bash
 # Set up AI (auto-detects Claude, Codex, Copilot, Ollama, or Azure OpenAI)
 cosq ai init
 
-# Generate a query from a description
+# Fully interactive: pick database, container, describe your query
+cosq queries generate
+
+# Or provide a description directly
 cosq queries generate "active users by region in the last 30 days"
+
+# Target a specific database/container
+cosq queries generate --db mydb --container users "top 10 by login count"
 ```
 
 See [INSTALL.md](INSTALL.md) for all installation methods, shell completions, and platform-specific instructions.

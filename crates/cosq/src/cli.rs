@@ -181,8 +181,16 @@ pub enum QueriesCommands {
 
     /// Generate a stored query from a natural language description (requires AI config)
     Generate {
-        /// Natural language description of the query
-        description: String,
+        /// Natural language description (interactive prompt if omitted)
+        description: Option<String>,
+
+        /// Database name (interactive picker if omitted)
+        #[arg(long)]
+        db: Option<String>,
+
+        /// Container name (interactive picker if omitted)
+        #[arg(long)]
+        container: Option<String>,
 
         /// Save to project directory (.cosq/queries/) instead of user directory
         #[arg(long)]

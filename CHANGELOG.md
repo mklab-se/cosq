@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-02-26
+
+### Added
+
+- **Schema-aware AI query generation** — `cosq queries generate` now connects to the target Cosmos DB container, samples real documents, and includes the schema context in the AI prompt. The AI only references fields that actually exist in your data
+- **Automatic template generation** — AI-generated queries now always include a MiniJinja output template: table layout for lists, property-value layout for single results, CSV for "CSV" requests, and no template when "JSON" is requested
+- **Fully interactive mode** — running `cosq queries generate` with no arguments interactively picks a database, container, and prompts for a natural language description
+- **Multi-turn conversation** — if the AI needs clarification (e.g. ambiguous field names), it asks 1-3 questions and the user answers before generation (up to 3 rounds)
+- **`--db` and `--container` flags** on `cosq queries generate` for non-interactive database/container selection
+- **Shared DB/container resolution helper (`commands/common.rs`)** — standard fallback chain (CLI flag > query metadata > config > interactive picker) used by `query`, `run`, and `queries generate`. Auto-selects when only one option exists
+
+### Changed
+
+- `cosq queries generate` description argument is now optional (prompts interactively if omitted)
+- Generated queries auto-populate `database` and `container` metadata from the resolved target
+- Refactored `query.rs` and `run.rs` to use shared resolution helpers, eliminating ~100 lines of duplicated code
+
 ## [0.4.0] - 2026-02-26
 
 ### Added

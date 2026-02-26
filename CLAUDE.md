@@ -31,6 +31,7 @@ crates/
         completion.rs # `cosq completion` (static + dynamic completion tip)
         init.rs     # `cosq init` (interactive Cosmos DB account setup)
         ai.rs       # `cosq ai init` (interactive AI provider setup)
+        common.rs   # Shared DB/container resolution (CLI flag > metadata > config > picker)
         query.rs    # `cosq query` (SQL query execution with output formatting)
         run.rs      # `cosq run` (execute stored queries with parameters)
         queries.rs  # `cosq queries` (list/create/edit/delete/show/generate stored queries)
@@ -69,7 +70,7 @@ crates/
 - Cosmos DB data plane: REST API with AAD token auth, parameterized queries, pagination via `x-ms-continuation`
 - Stored queries: `.cosq` files with YAML front matter + SQL body, stored in `~/.cosq/queries/` (user) and `.cosq/queries/` (project, overrides user)
 - Output formatting: JSON (default), JSON-compact, table (comfy-table), CSV, MiniJinja templates
-- AI query generation: multi-provider support via unified dispatcher — Azure OpenAI API, local CLI agents (claude, codex, copilot), and Ollama local LLMs. Configured via `cosq ai init`
+- AI query generation: schema-aware, multi-provider via unified dispatcher — samples real documents for field context, generates SQL + templates, supports multi-turn conversation. Providers: Azure OpenAI API, local CLI agents (claude, codex, copilot), Ollama local LLMs. Configured via `cosq ai init`
 - Config: `~/.config/cosq/config.yaml` (via `dirs::config_dir()`), includes optional `database`/`container`/`ai` sections
 - Update checker: background task, cached at `~/.cache/cosq/`, skip with `COSQ_NO_UPDATE_CHECK=1`
 

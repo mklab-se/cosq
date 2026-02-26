@@ -14,6 +14,7 @@ use dialoguer::theme::ColorfulTheme;
 use dialoguer::{FuzzySelect, Input};
 use serde_json::Value;
 
+use super::common;
 use crate::output::{OutputFormat, render_template, write_results};
 
 pub struct RunArgs {
@@ -55,69 +56,23 @@ pub async fn run(args: RunArgs) -> Result<()> {
     let mut config = Config::load()?;
     let client = CosmosClient::new(&config.account.endpoint).await?;
 
-    // Resolve database: CLI > query metadata > config > interactive
-    let mut config_changed = false;
-    let database = if let Some(db) = args.db {
-        db
-    } else if let Some(ref db) = query.metadata.database {
-        db.clone()
-    } else if let Some(ref db) = config.database {
-        db.clone()
-    } else {
-        let databases = client.list_databases().await?;
-        if databases.is_empty() {
-            bail!(
-                "No databases found in Cosmos DB account '{}'.",
-                config.account.name
-            );
-        }
-        let db = if databases.len() == 1 {
-            eprintln!("{} {}", "Using database:".bold(), databases[0].green());
-            databases[0].clone()
-        } else {
-            let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-                .with_prompt("Select a database")
-                .items(&databases)
-                .default(0)
-                .interact()
-                .context("database selection cancelled")?;
-            databases[selection].clone()
-        };
-        config.database = Some(db.clone());
-        config_changed = true;
-        db
-    };
+    let (database, db_changed) = common::resolve_database(
+        &client,
+        &mut config,
+        args.db,
+        query.metadata.database.as_deref(),
+    )
+    .await?;
+    let (container, ctr_changed) = common::resolve_container(
+        &client,
+        &mut config,
+        &database,
+        args.container,
+        query.metadata.container.as_deref(),
+    )
+    .await?;
 
-    // Resolve container: CLI > query metadata > config > interactive
-    let container = if let Some(ctr) = args.container {
-        ctr
-    } else if let Some(ref ctr) = query.metadata.container {
-        ctr.clone()
-    } else if let Some(ref ctr) = config.container {
-        ctr.clone()
-    } else {
-        let containers = client.list_containers(&database).await?;
-        if containers.is_empty() {
-            bail!("No containers found in database '{database}'.");
-        }
-        let ctr = if containers.len() == 1 {
-            eprintln!("{} {}", "Using container:".bold(), containers[0].green());
-            containers[0].clone()
-        } else {
-            let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-                .with_prompt("Select a container")
-                .items(&containers)
-                .default(0)
-                .interact()
-                .context("container selection cancelled")?;
-            containers[selection].clone()
-        };
-        config.container = Some(ctr.clone());
-        config_changed = true;
-        ctr
-    };
-
-    if config_changed {
+    if db_changed || ctr_changed {
         config.save()?;
     }
 
@@ -127,9 +82,6 @@ pub async fn run(args: RunArgs) -> Result<()> {
         .await?;
 
     // Determine output format
-    // If an explicit template file is passed, use it
-    // If the query has an embedded template and no explicit output format, auto-use it
-    // Otherwise use the specified format (or default JSON)
     let has_template = args.template.is_some()
         || query.metadata.template.is_some()
         || query.metadata.template_file.is_some();
@@ -151,7 +103,6 @@ pub async fn run(args: RunArgs) -> Result<()> {
                 std::fs::read_to_string(tmpl_file)
                     .with_context(|| format!("failed to read template file: {tmpl_file}"))?
             } else {
-                // No template available, fall back to JSON
                 write_results(
                     &mut std::io::stdout(),
                     &result.documents,
@@ -247,10 +198,8 @@ fn resolve_params_interactive(
 
     for param in &query.metadata.params {
         let value = if let Some(raw) = cli_params.get(&param.name) {
-            // Parse from CLI string
             cosq_core::stored_query::parse_param_value_public(&param.name, &param.param_type, raw)?
         } else if let Some(ref choices) = param.choices {
-            // Interactive: fuzzy-select from choices
             let choice_strs: Vec<String> = choices
                 .iter()
                 .map(|c| match c {
@@ -280,7 +229,6 @@ fn resolve_params_interactive(
 
             choices[selection].clone()
         } else if param.is_required() || param.default.is_some() {
-            // Interactive: text input
             let prompt = if let Some(ref desc) = param.description {
                 format!("{} ({})", param.name, desc)
             } else {
@@ -308,7 +256,6 @@ fn resolve_params_interactive(
 
             cosq_core::stored_query::parse_param_value_public(&param.name, &param.param_type, &raw)?
         } else {
-            // Not required and no default — skip
             continue;
         };
 
