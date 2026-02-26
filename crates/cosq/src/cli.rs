@@ -202,6 +202,8 @@ pub enum QueriesCommands {
 pub enum AiCommands {
     /// Set up AI provider for query generation (local CLI agents, Ollama, or Azure OpenAI)
     Init,
+    /// Show current AI provider configuration
+    Status,
 }
 
 #[derive(clap::Subcommand)]

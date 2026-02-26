@@ -12,7 +12,50 @@ use crate::cli::AiCommands;
 pub async fn run(cmd: AiCommands) -> Result<()> {
     match cmd {
         AiCommands::Init => init().await,
+        AiCommands::Status => status(),
     }
+}
+
+fn status() -> Result<()> {
+    let config = Config::load().map_err(|_| {
+        anyhow::anyhow!(
+            "No cosq config found. Run `cosq init` first to set up your Cosmos DB account."
+        )
+    })?;
+
+    match config.ai {
+        Some(ai) => {
+            println!(
+                "{} {}",
+                "Provider:".bold(),
+                ai.provider.display_name().cyan()
+            );
+            if let Some(model) = ai.effective_model() {
+                println!("{} {}", "Model:".bold(), model);
+            }
+            if let Some(ref account) = ai.account {
+                println!("{} {}", "Account:".bold(), account);
+            }
+            if let Some(ref deployment) = ai.deployment {
+                println!("{} {}", "Deployment:".bold(), deployment);
+            }
+            if let Some(ref endpoint) = ai.endpoint {
+                println!("{} {}", "Endpoint:".bold(), endpoint);
+            }
+            if let Some(ref url) = ai.ollama_url {
+                println!("{} {}", "Ollama URL:".bold(), url);
+            }
+        }
+        None => {
+            println!(
+                "{} AI is not configured. Run {} to set up a provider.",
+                "!".yellow().bold(),
+                "cosq ai init".cyan()
+            );
+        }
+    }
+
+    Ok(())
 }
 
 async fn init() -> Result<()> {

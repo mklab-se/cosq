@@ -315,26 +315,47 @@ async fn generate(
                 query = Some(parsed);
                 break;
             }
-            Err(_) if round < max_rounds - 1 => {
-                // AI is asking clarifying questions — show them and get answers
-                eprintln!("\n{}", "The AI needs clarification:".bold());
-                for line in content.lines() {
-                    if !line.trim().is_empty() {
-                        eprintln!("  {}", line);
+            Err(parse_err) if round < max_rounds - 1 => {
+                // Check if this looks like a .cosq file that failed to parse
+                // vs. the AI asking clarifying questions (plain text)
+                let looks_like_query = content.contains("---")
+                    && (content.contains("SELECT") || content.contains("select"));
+
+                if looks_like_query {
+                    // The AI generated a query but it has errors — retry with the error
+                    eprintln!(
+                        "\n{} {}",
+                        "Generated query has errors, retrying:".yellow().bold(),
+                        format!("{parse_err}").dimmed()
+                    );
+
+                    conversation_prompt = format!(
+                        "Original request: {description}\n\n\
+                         Your previous response had a parse error: {parse_err}\n\n\
+                         Here was your response:\n{content}\n\n\
+                         Fix the error and generate a valid .cosq file."
+                    );
+                } else {
+                    // The AI is asking clarifying questions — show them
+                    eprintln!();
+                    for line in content.lines() {
+                        if !line.trim().is_empty() {
+                            eprintln!("  {}", line);
+                        }
                     }
+                    eprintln!();
+
+                    let answer: String = inquire::Text::new("Your answer:")
+                        .prompt()
+                        .context("input cancelled")?;
+
+                    conversation_prompt = format!(
+                        "Original request: {description}\n\n\
+                         You asked:\n{content}\n\n\
+                         User answered: {answer}\n\n\
+                         Now generate the .cosq file."
+                    );
                 }
-                eprintln!();
-
-                let answer: String = inquire::Text::new("Your answer:")
-                    .prompt()
-                    .context("input cancelled")?;
-
-                conversation_prompt = format!(
-                    "Original request: {description}\n\n\
-                     You asked:\n{content}\n\n\
-                     User answered: {answer}\n\n\
-                     Now generate the .cosq file."
-                );
 
                 if !quiet {
                     eprintln!(
@@ -345,15 +366,15 @@ async fn generate(
             }
             Err(_) => {
                 bail!(
-                    "AI did not produce a valid query after {max_rounds} attempts. \
-                     Try rephrasing your description or run with more detail."
+                    "Could not generate a valid query after {max_rounds} attempts. \
+                     Try rephrasing your description or adding more detail."
                 );
             }
         }
     }
 
     let mut query = query.ok_or_else(|| {
-        anyhow::anyhow!("AI did not produce a valid query. Try rephrasing your description.")
+        anyhow::anyhow!("Could not generate a valid query. Try rephrasing your description.")
     })?;
 
     // --- Step 7: Finalize and save ---
