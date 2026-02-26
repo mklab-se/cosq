@@ -46,10 +46,11 @@ pub struct AccountConfig {
 }
 
 /// AI provider backend for query generation
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AiProvider {
     /// Azure OpenAI API (requires Azure subscription and deployment)
+    #[default]
     AzureOpenai,
     /// Anthropic Claude via local CLI
     Claude,
@@ -59,12 +60,6 @@ pub enum AiProvider {
     Copilot,
     /// Local LLMs via Ollama
     Ollama,
-}
-
-impl Default for AiProvider {
-    fn default() -> Self {
-        Self::AzureOpenai
-    }
 }
 
 impl std::fmt::Display for AiProvider {
