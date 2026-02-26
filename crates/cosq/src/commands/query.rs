@@ -1,7 +1,7 @@
 //! Query command — execute SQL queries against Cosmos DB
 //!
 //! Resolves database and container from CLI flags, config, or interactive
-//! prompts, then executes the query and prints results as JSON to stdout.
+//! prompts, then executes the query and prints results in the requested format.
 
 use anyhow::{Context, Result, bail};
 use colored::Colorize;
@@ -10,10 +10,14 @@ use cosq_core::config::Config;
 use dialoguer::FuzzySelect;
 use dialoguer::theme::ColorfulTheme;
 
+use crate::output::{OutputFormat, render_template, write_results};
+
 pub struct QueryArgs {
     pub sql: String,
     pub db: Option<String>,
     pub container: Option<String>,
+    pub output: Option<OutputFormat>,
+    pub template: Option<String>,
     pub quiet: bool,
 }
 
@@ -105,9 +109,38 @@ pub async fn run(args: QueryArgs) -> Result<()> {
     // Execute query
     let result = client.query(&database, &container, &args.sql).await?;
 
-    // Print JSON to stdout (pretty-printed)
-    let json = serde_json::to_string_pretty(&result.documents)?;
-    println!("{json}");
+    // Determine output format
+    let has_template = args.template.is_some();
+    let format = args.output.unwrap_or(if has_template {
+        OutputFormat::Template
+    } else {
+        OutputFormat::Json
+    });
+
+    match format {
+        OutputFormat::Template => {
+            if let Some(ref path) = args.template {
+                let template_str = std::fs::read_to_string(path)
+                    .with_context(|| format!("failed to read template file: {path}"))?;
+                let rendered = render_template(
+                    &template_str,
+                    &result.documents,
+                    &std::collections::BTreeMap::new(),
+                )?;
+                print!("{rendered}");
+            } else {
+                // No template specified, fall back to JSON
+                write_results(
+                    &mut std::io::stdout(),
+                    &result.documents,
+                    &OutputFormat::Json,
+                )?;
+            }
+        }
+        _ => {
+            write_results(&mut std::io::stdout(), &result.documents, &format)?;
+        }
+    }
 
     // Print RU cost to stderr (unless quiet)
     if !args.quiet {

@@ -278,7 +278,22 @@ impl CosmosClient {
         container: &str,
         sql: &str,
     ) -> Result<QueryResult, ClientError> {
-        debug!(database, container, sql, "executing query");
+        self.query_with_params(database, container, sql, Vec::new())
+            .await
+    }
+
+    /// Execute a parameterized SQL query against a container.
+    ///
+    /// Parameters should be in Cosmos DB format:
+    /// `[{"name": "@param", "value": ...}, ...]`
+    pub async fn query_with_params(
+        &self,
+        database: &str,
+        container: &str,
+        sql: &str,
+        parameters: Vec<Value>,
+    ) -> Result<QueryResult, ClientError> {
+        debug!(database, container, sql, params = ?parameters, "executing query");
 
         let url = format!(
             "{}/dbs/{}/colls/{}/docs",
@@ -286,7 +301,7 @@ impl CosmosClient {
         );
         let body = serde_json::json!({
             "query": sql,
-            "parameters": []
+            "parameters": parameters
         });
 
         // Get partition key ranges and fan out the query

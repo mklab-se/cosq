@@ -1,18 +1,22 @@
 //! cosq - A CLI to query your Azure Cosmos DB instances
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 mod banner;
 mod cli;
 mod commands;
+mod output;
 mod update;
 
 use cli::Cli;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Handle dynamic shell completions (when invoked via COMPLETE=<shell> cosq)
+    clap_complete::CompleteEnv::with_factory(Cli::command).complete();
+
     let cli = Cli::parse();
 
     // Initialize logging

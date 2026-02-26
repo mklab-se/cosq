@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-02-26
+
+### Added
+
+- **Stored queries** — save SQL queries as `.cosq` files in `~/.cosq/queries/` (user-level) or `.cosq/queries/` (project-level). YAML front matter for metadata (description, database, container, parameters, templates) with the SQL body below. Project-level queries override user-level ones with the same name
+- **`cosq run` command** — execute stored queries by name with parameterized inputs. Parameters can be passed via CLI (`-- --days 7 --status shipped`) or resolved interactively with fuzzy-select for choice parameters and text input with defaults. Running `cosq run` without a name opens an interactive query picker
+- **`cosq queries` subcommands** — `list` (show all stored queries with descriptions), `create` (scaffold and open in editor), `edit` (open in `$VISUAL`/`$EDITOR`), `delete` (with confirmation), `show` (display query details, parameters, SQL, and template)
+- **AI query generation (`cosq queries generate`)** — generate stored queries from natural language descriptions using Azure OpenAI. Automatically extracts parameters, generates SQL, creates MiniJinja output templates, and saves as `.cosq` files. Requires `ai:` config section with Azure OpenAI account and deployment
+- **Output formatting** — new `--output` flag on `query` and `run` commands supporting `json` (default), `json-compact` (one line per document), `table` (Unicode columnar via comfy-table), and `csv`. Complex nested values are truncated intelligently in table/CSV output
+- **Template output** — MiniJinja-based output templates via `--template <file>` or embedded in stored query files. Templates have access to `documents` array and all parameter values. Stored queries with templates auto-use them unless `--output` is explicitly specified
+- **Parameterized Cosmos DB queries** — new `query_with_params()` method in cosq-client passes parameters to the Cosmos DB REST API natively via the `parameters` array, preventing SQL injection
+- **Azure OpenAI client (`cosq-client/openai.rs`)** — chat completion via Azure OpenAI REST API with AAD token authentication (cognitive services scope), following the same pattern as the hoist project
+- **AI configuration** — optional `ai:` section in `config.yaml` with `account`, `deployment`, and `api_version` fields for Azure OpenAI integration
+- **Dynamic shell completions** — stored query names now tab-complete in `cosq run`, `cosq queries edit/delete/show`. Enable with `source <(COMPLETE=bash cosq)` (or zsh/fish). The `cosq completion` command now shows a tip about this
+- **Interactive query picker** — `cosq run` without arguments shows a fuzzy-select list of all stored queries with descriptions
+
+### Changed
+
+- `cosq query` now supports `--output` and `--template` flags for output formatting (previously only JSON)
+- Shell completions now support dynamic mode via `clap_complete` `CompleteEnv` for runtime query name resolution
+
 ## [0.2.2] - 2026-02-25
 
 ### Fixed

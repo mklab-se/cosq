@@ -45,6 +45,47 @@ pub struct AccountConfig {
     pub endpoint: String,
 }
 
+/// Azure OpenAI configuration for AI-powered features
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiConfig {
+    /// Azure AI Services account name
+    pub account: String,
+
+    /// Model deployment name (e.g., "gpt-4o-mini")
+    pub deployment: String,
+
+    /// Custom endpoint URL (overrides name-based URL)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+
+    /// Azure subscription ID (for ARM discovery during `ai init`)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subscription: Option<String>,
+
+    /// Azure resource group (for ARM discovery)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_group: Option<String>,
+
+    /// Azure OpenAI API version
+    #[serde(default = "default_openai_api_version")]
+    pub api_version: String,
+}
+
+fn default_openai_api_version() -> String {
+    "2024-12-01-preview".to_string()
+}
+
+impl AiConfig {
+    /// Get the Azure OpenAI endpoint URL
+    pub fn openai_endpoint(&self) -> String {
+        if let Some(ref ep) = self.endpoint {
+            ep.trim_end_matches('/').to_string()
+        } else {
+            format!("https://{}.openai.azure.com", self.account)
+        }
+    }
+}
+
 /// Top-level cosq configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -58,6 +99,10 @@ pub struct Config {
     /// Default container name
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub container: Option<String>,
+
+    /// AI configuration for natural language query generation
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ai: Option<AiConfig>,
 }
 
 impl Config {
@@ -130,6 +175,7 @@ mod tests {
             },
             database: None,
             container: None,
+            ai: None,
         };
 
         let yaml = serde_yaml::to_string(&config).unwrap();
@@ -154,6 +200,7 @@ mod tests {
             },
             database: Some("mydb".into()),
             container: Some("users".into()),
+            ai: None,
         };
 
         let yaml = serde_yaml::to_string(&config).unwrap();
@@ -188,6 +235,7 @@ account:
             },
             database: None,
             container: None,
+            ai: None,
         };
 
         let yaml = serde_yaml::to_string(&config).unwrap();
@@ -208,6 +256,7 @@ account:
             },
             database: Some("testdb".into()),
             container: None,
+            ai: None,
         };
 
         config.save_to(&path).unwrap();
@@ -240,9 +289,84 @@ account:
             },
             database: None,
             container: None,
+            ai: None,
         };
 
         config.save_to(&path).unwrap();
         assert!(path.exists());
+    }
+
+    #[test]
+    fn test_config_with_ai() {
+        let config = Config {
+            account: AccountConfig {
+                name: "test".into(),
+                subscription: "sub".into(),
+                resource_group: "rg".into(),
+                endpoint: "https://test.documents.azure.com:443/".into(),
+            },
+            database: None,
+            container: None,
+            ai: Some(AiConfig {
+                account: "my-ai".into(),
+                deployment: "gpt-4o-mini".into(),
+                endpoint: None,
+                subscription: None,
+                resource_group: None,
+                api_version: "2024-12-01-preview".into(),
+            }),
+        };
+
+        let yaml = serde_yaml::to_string(&config).unwrap();
+        assert!(yaml.contains("ai:"));
+        assert!(yaml.contains("gpt-4o-mini"));
+
+        let parsed: Config = serde_yaml::from_str(&yaml).unwrap();
+        let ai = parsed.ai.unwrap();
+        assert_eq!(ai.account, "my-ai");
+        assert_eq!(ai.deployment, "gpt-4o-mini");
+    }
+
+    #[test]
+    fn test_ai_config_endpoint() {
+        let config = AiConfig {
+            account: "my-ai-services".into(),
+            deployment: "gpt-4o-mini".into(),
+            endpoint: None,
+            subscription: None,
+            resource_group: None,
+            api_version: "2024-12-01-preview".into(),
+        };
+        assert_eq!(
+            config.openai_endpoint(),
+            "https://my-ai-services.openai.azure.com"
+        );
+    }
+
+    #[test]
+    fn test_ai_config_endpoint_override() {
+        let config = AiConfig {
+            account: "my-ai-services".into(),
+            deployment: "gpt-4o-mini".into(),
+            endpoint: Some("https://custom.openai.azure.com/".into()),
+            subscription: None,
+            resource_group: None,
+            api_version: "2024-12-01-preview".into(),
+        };
+        assert_eq!(config.openai_endpoint(), "https://custom.openai.azure.com");
+    }
+
+    #[test]
+    fn test_config_backward_compat_no_ai() {
+        let yaml = r#"
+account:
+  name: old-account
+  subscription: sub-old
+  resource_group: rg-old
+  endpoint: https://old-account.documents.azure.com:443/
+database: mydb
+"#;
+        let parsed: Config = serde_yaml::from_str(yaml).unwrap();
+        assert!(parsed.ai.is_none());
     }
 }

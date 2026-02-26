@@ -34,11 +34,33 @@ cosq init
 # Run a query
 cosq query "SELECT * FROM c"
 
-# Override database/container
-cosq query "SELECT * FROM c" --db mydb --container users
+# Output as table or CSV
+cosq query "SELECT * FROM c" --output table
+cosq query "SELECT * FROM c" --output csv
 
 # Pipe-friendly (JSON to stdout, metadata to stderr)
 cosq query "SELECT c.name FROM c" -q | jq '.[].name'
+```
+
+## Stored Queries
+
+Save and reuse parameterized queries as `.cosq` files:
+
+```bash
+# Create a stored query (opens in editor)
+cosq queries create recent-users
+
+# List all stored queries
+cosq queries list
+
+# Run a stored query (interactive parameter prompts)
+cosq run recent-users
+
+# Run with parameters from the command line
+cosq run recent-users -- --days 7
+
+# Browse and pick a query interactively
+cosq run
 ```
 
 See [INSTALL.md](INSTALL.md) for all installation methods, shell completions, and platform-specific instructions.

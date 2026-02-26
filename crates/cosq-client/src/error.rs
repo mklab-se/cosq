@@ -22,6 +22,9 @@ pub enum ClientError {
     #[error("Azure CLI error: {message}\n\nHint: {hint}")]
     AzCli { message: String, hint: String },
 
+    #[error("Azure OpenAI error: {message}")]
+    OpenAI { message: String },
+
     #[error("{0}")]
     Other(String),
 }
@@ -49,6 +52,12 @@ impl ClientError {
 
     pub fn not_found(msg: impl Into<String>) -> Self {
         Self::NotFound {
+            message: msg.into(),
+        }
+    }
+
+    pub fn openai(msg: impl Into<String>) -> Self {
+        Self::OpenAI {
             message: msg.into(),
         }
     }

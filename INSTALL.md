@@ -69,7 +69,28 @@ For most users, Homebrew or a direct binary download from [GitHub Releases](http
 
 ## Shell Completions
 
-Generate completions for your shell with `cosq completion <shell>`:
+### Dynamic Completions (recommended)
+
+Dynamic completions include tab-completion for stored query names. Add to your shell config:
+
+**Bash** — add to `~/.bashrc`:
+```bash
+source <(COMPLETE=bash cosq)
+```
+
+**Zsh** — add to `~/.zshrc`:
+```bash
+source <(COMPLETE=zsh cosq)
+```
+
+**Fish** — add to `~/.config/fish/config.fish`:
+```bash
+source (COMPLETE=fish cosq | psub)
+```
+
+### Static Completions
+
+If you prefer static completions (no stored query name tab-completion), use `cosq completion <shell>`:
 
 **Bash** — add to `~/.bashrc`:
 ```bash
