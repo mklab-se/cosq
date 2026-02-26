@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-02-26
+
+### Added
+
+- **Multi-step queries** — stored queries can now execute across multiple containers in a single run. Define `steps:` in the YAML front matter with per-step containers, and use `-- step: <name>` markers to separate SQL blocks. Steps execute in dependency order with automatic parallel execution for independent steps
+- **Cross-step references** — use `@step.field` syntax (e.g., `@customer.id`) to reference the first result of a previous step, enabling chained queries like "find customer by name, then get their orders"
+- **Pipeline executor (`commands/pipeline.rs`)** — topological sort of step dependencies into execution layers. Independent steps in the same layer run concurrently via `tokio::spawn`
+- **Multi-step template rendering** — `render_multi_step_template()` makes each step's results available as top-level template variables by step name
+- **Custom MiniJinja filters** — `truncate(length)` truncates strings with "..." suffix, `pad(width)` left-aligns strings to minimum width. Fixes "unknown filter" errors for AI-generated templates that use these common filters
+- **AI-assisted template error recovery** — when a template fails during `cosq run`, cosq now offers to fix it via AI. The fixed template can be saved back to the `.cosq` file
+- **Run-after-generate** — after `cosq queries generate` creates a query, cosq now offers to run it immediately to verify it works, or open it in an editor
+- **Multi-container AI generation** — `cosq queries generate` now lets you pick one or multiple containers. When multiple containers are selected, the AI generates multi-step queries with the correct syntax. Fan-out queries are explicitly out of scope
+
+### Changed
+
+- `cosq queries generate` now always prompts for container selection (previously silently used the configured default, even when multiple containers existed)
+- `CosmosClient` now implements `Clone` to support parallel step execution
+
 ## [0.5.0] - 2026-02-26
 
 ### Added

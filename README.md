@@ -63,6 +63,35 @@ cosq run recent-users -- --days 7
 cosq run
 ```
 
+## Multi-Step Queries
+
+Query across multiple containers in a single stored query:
+
+```yaml
+# ~/.cosq/queries/order-details.cosq
+---
+description: Get order with customer details
+params:
+  - name: orderId
+    type: string
+steps:
+  - name: order
+    container: orders
+  - name: customer
+    container: customers
+template: |
+  Order: {{ order[0].id }}
+  Customer: {{ customer[0].name }}
+---
+-- step: order
+SELECT * FROM c WHERE c.id = @orderId
+
+-- step: customer
+SELECT * FROM c WHERE c.id = @order.customerId
+```
+
+Steps execute in dependency order — independent steps run in parallel, while steps referencing `@step.field` wait for that step to complete.
+
 ## AI Query Generation
 
 Generate stored queries from natural language — the AI samples your actual documents for field-accurate SQL and auto-generates output templates:

@@ -15,7 +15,7 @@ use dialoguer::{FuzzySelect, Input};
 use serde_json::Value;
 
 use super::common;
-use crate::output::{OutputFormat, render_template, write_results};
+use crate::output::{OutputFormat, render_multi_step_template, render_template, write_results};
 
 pub struct RunArgs {
     pub name: Option<String>,
@@ -49,9 +49,6 @@ pub async fn run(args: RunArgs) -> Result<()> {
     // Resolve parameters: CLI > interactive > default
     let resolved = resolve_params_interactive(&query, &cli_params)?;
 
-    // Build Cosmos DB parameters
-    let cosmos_params = StoredQuery::build_cosmos_params(&resolved);
-
     // Load config for connection details
     let mut config = Config::load()?;
     let client = CosmosClient::new(&config.account.endpoint).await?;
@@ -63,78 +60,286 @@ pub async fn run(args: RunArgs) -> Result<()> {
         query.metadata.database.as_deref(),
     )
     .await?;
-    let (container, ctr_changed) = common::resolve_container(
-        &client,
-        &mut config,
-        &database,
-        args.container,
-        query.metadata.container.as_deref(),
-    )
-    .await?;
 
-    if db_changed || ctr_changed {
-        config.save()?;
-    }
+    if query.is_multi_step() {
+        // Multi-step execution: resolve database only (containers are per-step)
+        if db_changed {
+            config.save()?;
+        }
 
-    // Execute query
-    let result = client
-        .query_with_params(&database, &container, &query.sql, cosmos_params)
+        if !args.quiet {
+            eprintln!("{}", "Executing steps:".dimmed());
+        }
+
+        let pipeline_result =
+            super::pipeline::execute(&client, &database, &query, &resolved, args.quiet).await?;
+
+        // Output multi-step results
+        let has_template = args.template.is_some()
+            || query.metadata.template.is_some()
+            || query.metadata.template_file.is_some();
+
+        let effective_output = args.output.unwrap_or(if has_template {
+            OutputFormat::Template
+        } else {
+            OutputFormat::Json
+        });
+
+        match effective_output {
+            OutputFormat::Template => {
+                let template_str = resolve_template_str(&args.template, &query)?;
+                if let Some(tmpl) = template_str {
+                    // Flatten all step results for rendering recovery
+                    let all_docs: Vec<Value> = pipeline_result
+                        .step_results
+                        .values()
+                        .flat_map(|v| v.clone())
+                        .collect();
+                    match render_multi_step_template(
+                        &tmpl,
+                        &pipeline_result.step_results,
+                        &resolved,
+                    ) {
+                        Ok(rendered) => print!("{rendered}"),
+                        Err(_) => {
+                            let rendered =
+                                render_with_ai_recovery(&tmpl, &all_docs, &resolved, &query)
+                                    .await?;
+                            print!("{rendered}");
+                        }
+                    }
+                } else {
+                    // No template — output all step results as JSON
+                    let combined: serde_json::Value =
+                        serde_json::to_value(&pipeline_result.step_results)?;
+                    let json = serde_json::to_string_pretty(&combined)?;
+                    println!("{json}");
+                }
+            }
+            _ => {
+                // For non-template formats, combine all step results
+                let combined: serde_json::Value =
+                    serde_json::to_value(&pipeline_result.step_results)?;
+                let json = serde_json::to_string_pretty(&combined)?;
+                println!("{json}");
+            }
+        }
+
+        if !args.quiet {
+            eprintln!(
+                "\n{} {:.2} RUs",
+                "Request charge:".dimmed(),
+                pipeline_result.total_charge
+            );
+        }
+    } else {
+        // Single-step execution (original path)
+        let (container, ctr_changed) = common::resolve_container(
+            &client,
+            &mut config,
+            &database,
+            args.container,
+            query.metadata.container.as_deref(),
+        )
         .await?;
 
-    // Determine output format
-    let has_template = args.template.is_some()
-        || query.metadata.template.is_some()
-        || query.metadata.template_file.is_some();
+        if db_changed || ctr_changed {
+            config.save()?;
+        }
 
-    let effective_output = args.output.unwrap_or(if has_template {
-        OutputFormat::Template
-    } else {
-        OutputFormat::Json
-    });
+        let cosmos_params = StoredQuery::build_cosmos_params(&resolved);
+        let result = client
+            .query_with_params(&database, &container, &query.sql, cosmos_params)
+            .await?;
 
-    match effective_output {
-        OutputFormat::Template => {
-            let template_str = if let Some(ref path) = args.template {
-                std::fs::read_to_string(path)
-                    .with_context(|| format!("failed to read template file: {path}"))?
-            } else if let Some(ref tmpl) = query.metadata.template {
-                tmpl.clone()
-            } else if let Some(ref tmpl_file) = query.metadata.template_file {
-                std::fs::read_to_string(tmpl_file)
-                    .with_context(|| format!("failed to read template file: {tmpl_file}"))?
-            } else {
-                write_results(
-                    &mut std::io::stdout(),
-                    &result.documents,
-                    &OutputFormat::Json,
-                )?;
-                if !args.quiet {
-                    eprintln!(
-                        "\n{} {:.2} RUs",
-                        "Request charge:".dimmed(),
-                        result.request_charge
-                    );
+        let has_template = args.template.is_some()
+            || query.metadata.template.is_some()
+            || query.metadata.template_file.is_some();
+
+        let effective_output = args.output.unwrap_or(if has_template {
+            OutputFormat::Template
+        } else {
+            OutputFormat::Json
+        });
+
+        match effective_output {
+            OutputFormat::Template => {
+                let template_str = resolve_template_str(&args.template, &query)?;
+                if let Some(tmpl) = template_str {
+                    let rendered =
+                        render_with_ai_recovery(&tmpl, &result.documents, &resolved, &query)
+                            .await?;
+                    print!("{rendered}");
+                } else {
+                    write_results(
+                        &mut std::io::stdout(),
+                        &result.documents,
+                        &OutputFormat::Json,
+                    )?;
                 }
-                return Ok(());
-            };
-
-            let rendered = render_template(&template_str, &result.documents, &resolved)?;
-            print!("{rendered}");
+            }
+            _ => {
+                write_results(&mut std::io::stdout(), &result.documents, &effective_output)?;
+            }
         }
-        _ => {
-            write_results(&mut std::io::stdout(), &result.documents, &effective_output)?;
-        }
-    }
 
-    if !args.quiet {
-        eprintln!(
-            "\n{} {:.2} RUs",
-            "Request charge:".dimmed(),
-            result.request_charge
-        );
+        if !args.quiet {
+            eprintln!(
+                "\n{} {:.2} RUs",
+                "Request charge:".dimmed(),
+                result.request_charge
+            );
+        }
     }
 
     Ok(())
+}
+
+/// Attempt to render a template, and if it fails, offer AI-assisted fix.
+/// Returns the rendered output or propagates the error if the user declines.
+async fn render_with_ai_recovery(
+    template_str: &str,
+    documents: &[Value],
+    params: &std::collections::BTreeMap<String, Value>,
+    query: &StoredQuery,
+) -> Result<String> {
+    match render_template(template_str, documents, params) {
+        Ok(rendered) => Ok(rendered),
+        Err(e) => {
+            let error_msg = format!("{e}");
+            eprintln!("\n{} {}", "Template error:".red().bold(), error_msg);
+
+            // Check if AI is configured
+            let config = Config::load().ok();
+            let ai_config = config.as_ref().and_then(|c| c.ai.clone());
+
+            if let Some(ai) = ai_config {
+                let fix = dialoguer::Confirm::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Would you like AI to fix this?")
+                    .default(true)
+                    .interact()
+                    .unwrap_or(false);
+
+                if fix {
+                    return fix_template_with_ai(
+                        &ai,
+                        template_str,
+                        &error_msg,
+                        documents,
+                        params,
+                        query,
+                    )
+                    .await;
+                }
+            }
+
+            Err(e)
+        }
+    }
+}
+
+/// Use AI to fix a broken template and re-render
+async fn fix_template_with_ai(
+    ai_config: &cosq_core::config::AiConfig,
+    broken_template: &str,
+    error_msg: &str,
+    documents: &[Value],
+    params: &std::collections::BTreeMap<String, Value>,
+    query: &StoredQuery,
+) -> Result<String> {
+    eprintln!(
+        "{}",
+        format!("Fixing via {}...", ai_config.provider.display_name()).dimmed()
+    );
+
+    let sample = if documents.is_empty() {
+        "(no documents)".to_string()
+    } else {
+        serde_json::to_string_pretty(&documents[0]).unwrap_or_default()
+    };
+
+    let system_prompt = format!(
+        "You fix MiniJinja templates for cosq query output. \
+         Respond with ONLY the corrected template — no explanation, no markdown fences.\n\n\
+         Available filters: truncate(length), pad(width), length, upper, lower, title, trim, replace, default, join, first, last, round.\n\
+         Available variables: documents (array of results), and named step arrays for multi-step queries.\n\n\
+         Sample document:\n{sample}"
+    );
+
+    let user_prompt = format!(
+        "This template has an error:\n\n{broken_template}\n\nError: {error_msg}\n\nFix the template."
+    );
+
+    let response = cosq_client::ai::generate_text(ai_config, &system_prompt, &user_prompt)
+        .await
+        .context("AI fix failed")?;
+
+    let fixed = response.trim().to_string();
+    let fixed = fixed
+        .strip_prefix("```")
+        .unwrap_or(&fixed)
+        .strip_suffix("```")
+        .unwrap_or(&fixed)
+        .trim();
+
+    // Try rendering with the fixed template
+    match render_template(fixed, documents, params) {
+        Ok(rendered) => {
+            eprintln!("{} Template fixed successfully.", "OK".green().bold());
+
+            // Offer to save the fix
+            if query.metadata.template.is_some() {
+                let save = dialoguer::Confirm::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Save the fixed template to the query file?")
+                    .default(true)
+                    .interact()
+                    .unwrap_or(false);
+
+                if save {
+                    if let Err(e) = save_fixed_template(query, fixed) {
+                        eprintln!("{} Could not save fix: {e}", "Warning:".yellow().bold());
+                    }
+                }
+            }
+
+            Ok(rendered)
+        }
+        Err(e2) => {
+            eprintln!("{} AI fix still has errors: {}", "Error:".red().bold(), e2);
+            Err(e2)
+        }
+    }
+}
+
+/// Save a fixed template back to the query's .cosq file
+fn save_fixed_template(query: &StoredQuery, fixed_template: &str) -> Result<()> {
+    let mut updated = query.clone();
+    updated.metadata.template = Some(fixed_template.to_string());
+    let contents = updated.to_file_contents()?;
+    let path = cosq_core::stored_query::query_file_path(&query.name, false)?;
+    std::fs::write(&path, &contents)?;
+    eprintln!("{} Saved fix to {}", "OK".green().bold(), path.display());
+    Ok(())
+}
+
+/// Resolve the template string from CLI arg, query metadata, or template file
+fn resolve_template_str(
+    cli_template: &Option<String>,
+    query: &StoredQuery,
+) -> Result<Option<String>> {
+    if let Some(path) = cli_template {
+        let content = std::fs::read_to_string(path)
+            .with_context(|| format!("failed to read template file: {path}"))?;
+        Ok(Some(content))
+    } else if let Some(ref tmpl) = query.metadata.template {
+        Ok(Some(tmpl.clone()))
+    } else if let Some(ref tmpl_file) = query.metadata.template_file {
+        let content = std::fs::read_to_string(tmpl_file)
+            .with_context(|| format!("failed to read template file: {tmpl_file}"))?;
+        Ok(Some(content))
+    } else {
+        Ok(None)
+    }
 }
 
 /// Interactively pick a stored query from a fuzzy-select list.

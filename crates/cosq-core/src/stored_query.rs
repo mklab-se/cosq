@@ -4,7 +4,7 @@
 //! followed by the SQL query body. They are stored in `~/.cosq/queries/` (user-level)
 //! or `.cosq/queries/` (project-level).
 //!
-//! Example:
+//! Single-step example:
 //! ```text
 //! ---
 //! description: Find users who signed up recently
@@ -19,6 +19,32 @@
 //! SELECT c.id, c.email, c.displayName, c.createdAt
 //! FROM c
 //! WHERE c.createdAt >= DateTimeAdd("dd", -@days, GetCurrentDateTime())
+//! ```
+//!
+//! Multi-step example:
+//! ```text
+//! ---
+//! description: Order with line items
+//! database: mydb
+//! params:
+//!   - name: orderId
+//!     type: string
+//! steps:
+//!   - name: header
+//!     container: order-headers
+//!   - name: lines
+//!     container: order-lines
+//! template: |
+//!   Order: {{ header[0].orderId }}
+//!   {% for line in lines %}
+//!   {{ line.productName }}  {{ line.quantity }}
+//!   {% endfor %}
+//! ---
+//! -- step: header
+//! SELECT * FROM c WHERE c.orderId = @orderId
+//!
+//! -- step: lines
+//! SELECT * FROM c WHERE c.orderId = @orderId
 //! ```
 
 use std::collections::BTreeMap;
@@ -73,6 +99,31 @@ pub enum StoredQueryError {
 
     #[error("no queries directory found")]
     NoQueriesDir,
+
+    #[error("step '{name}' referenced in SQL but not defined in steps")]
+    UndefinedStep { name: String },
+
+    #[error("step '{name}' defined in metadata but has no SQL (missing `-- step: {name}`)")]
+    MissingStepSql { name: String },
+
+    #[error("SQL has `-- step: {name}` marker but '{name}' is not defined in steps")]
+    UnknownStepMarker { name: String },
+
+    #[error("step '{name}' returned no results, cannot resolve @{name}.{field}")]
+    EmptyStepResult { name: String, field: String },
+
+    #[error("field '{field}' not found in step '{name}' result")]
+    StepFieldNotFound { name: String, field: String },
+}
+
+/// A step definition for multi-step queries
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepDef {
+    /// Step name (used as variable name in templates and as @step.field in SQL)
+    pub name: String,
+
+    /// Target container for this step
+    pub container: String,
 }
 
 /// Parameter type for stored query parameters
@@ -247,9 +298,13 @@ pub struct StoredQueryMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub database: Option<String>,
 
-    /// Target container (overrides config default)
+    /// Target container (overrides config default; used for single-step queries)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub container: Option<String>,
+
+    /// Step definitions for multi-step queries (each step targets a different container)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steps: Option<Vec<StepDef>>,
 
     /// Parameter definitions
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -281,23 +336,60 @@ pub struct StoredQuery {
     /// Query metadata from YAML front matter
     pub metadata: StoredQueryMetadata,
 
-    /// The SQL query body
+    /// The SQL query body (single-step queries only)
     pub sql: String,
+
+    /// SQL per step (multi-step queries only; keyed by step name)
+    pub step_queries: BTreeMap<String, String>,
 }
 
 impl StoredQuery {
     /// Parse a .cosq file from its contents
     pub fn parse(name: &str, contents: &str) -> Result<Self, StoredQueryError> {
-        let (metadata, sql) = parse_front_matter(contents)?;
-        let sql = sql.trim().to_string();
-        if sql.is_empty() {
+        let (metadata, raw_sql) = parse_front_matter(contents)?;
+        let raw_sql = raw_sql.trim().to_string();
+        if raw_sql.is_empty() {
             return Err(StoredQueryError::EmptyQuery);
         }
-        Ok(Self {
-            name: name.to_string(),
-            metadata,
-            sql,
-        })
+
+        if let Some(ref steps) = metadata.steps {
+            // Multi-step: parse `-- step: <name>` markers
+            let step_queries = parse_step_sql(&raw_sql)?;
+            let step_names: std::collections::HashSet<&str> =
+                steps.iter().map(|s| s.name.as_str()).collect();
+
+            // Validate: every step in metadata must have SQL
+            for step in steps {
+                if !step_queries.contains_key(&step.name) {
+                    return Err(StoredQueryError::MissingStepSql {
+                        name: step.name.clone(),
+                    });
+                }
+            }
+
+            // Validate: every SQL marker must correspond to a step in metadata
+            for sql_name in step_queries.keys() {
+                if !step_names.contains(sql_name.as_str()) {
+                    return Err(StoredQueryError::UnknownStepMarker {
+                        name: sql_name.clone(),
+                    });
+                }
+            }
+
+            Ok(Self {
+                name: name.to_string(),
+                metadata,
+                sql: String::new(),
+                step_queries,
+            })
+        } else {
+            Ok(Self {
+                name: name.to_string(),
+                metadata,
+                sql: raw_sql,
+                step_queries: BTreeMap::new(),
+            })
+        }
     }
 
     /// Load a stored query from a file path
@@ -311,10 +403,106 @@ impl StoredQuery {
         Self::parse(&name, &contents)
     }
 
+    /// Whether this is a multi-step query
+    pub fn is_multi_step(&self) -> bool {
+        self.metadata.steps.is_some()
+    }
+
     /// Serialize this stored query back to .cosq file format
     pub fn to_file_contents(&self) -> Result<String, serde_yaml::Error> {
         let yaml = serde_yaml::to_string(&self.metadata)?;
-        Ok(format!("---\n{}---\n{}\n", yaml, self.sql))
+        if self.is_multi_step() {
+            // Serialize step SQL blocks in the order they appear in metadata
+            let mut sql_body = String::new();
+            for (i, step) in self.metadata.steps.as_ref().unwrap().iter().enumerate() {
+                if i > 0 {
+                    sql_body.push('\n');
+                }
+                sql_body.push_str(&format!("-- step: {}\n", step.name));
+                if let Some(sql) = self.step_queries.get(&step.name) {
+                    sql_body.push_str(sql);
+                    if !sql.ends_with('\n') {
+                        sql_body.push('\n');
+                    }
+                }
+            }
+            Ok(format!("---\n{}---\n{}", yaml, sql_body))
+        } else {
+            Ok(format!("---\n{}---\n{}\n", yaml, self.sql))
+        }
+    }
+
+    /// Find step references in a step's SQL (e.g., @customer.id → ("customer", "id")).
+    /// Only matches @word.word patterns where the first word is a known step name.
+    pub fn find_step_references(sql: &str, step_names: &[String]) -> Vec<(String, String)> {
+        let re = regex::Regex::new(r"@(\w+)\.(\w+)").unwrap();
+        let mut refs = Vec::new();
+        for cap in re.captures_iter(sql) {
+            let step_name = cap[1].to_string();
+            let field_name = cap[2].to_string();
+            if step_names.contains(&step_name) {
+                refs.push((step_name, field_name));
+            }
+        }
+        refs
+    }
+
+    /// Build the execution order for multi-step queries.
+    /// Returns layers — steps in the same layer can execute in parallel.
+    /// Steps referencing other steps via @step.field must run after those steps.
+    pub fn execution_order(&self) -> Result<Vec<Vec<String>>, StoredQueryError> {
+        let steps = match &self.metadata.steps {
+            Some(s) => s,
+            None => return Ok(vec![vec![]]),
+        };
+
+        let step_names: Vec<String> = steps.iter().map(|s| s.name.clone()).collect();
+
+        // Build dependency map: step_name → set of step names it depends on
+        let mut deps: BTreeMap<String, std::collections::HashSet<String>> = BTreeMap::new();
+        for step in steps {
+            let sql = self
+                .step_queries
+                .get(&step.name)
+                .cloned()
+                .unwrap_or_default();
+            let step_refs = Self::find_step_references(&sql, &step_names);
+            let dep_names: std::collections::HashSet<String> =
+                step_refs.into_iter().map(|(name, _)| name).collect();
+            deps.insert(step.name.clone(), dep_names);
+        }
+
+        // Topological sort into layers
+        let mut layers = Vec::new();
+        let mut resolved: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut remaining: Vec<String> = step_names;
+
+        while !remaining.is_empty() {
+            let layer: Vec<String> = remaining
+                .iter()
+                .filter(|name| {
+                    deps.get(*name)
+                        .map(|d| d.iter().all(|dep| resolved.contains(dep)))
+                        .unwrap_or(true)
+                })
+                .cloned()
+                .collect();
+
+            if layer.is_empty() {
+                // Circular dependency
+                return Err(StoredQueryError::UndefinedStep {
+                    name: remaining.join(", "),
+                });
+            }
+
+            for name in &layer {
+                resolved.insert(name.clone());
+            }
+            remaining.retain(|name| !resolved.contains(name));
+            layers.push(layer);
+        }
+
+        Ok(layers)
     }
 
     /// Resolve parameters from a map of CLI-provided values, filling in defaults.
@@ -412,6 +600,45 @@ fn parse_param_value(
             }),
         },
     }
+}
+
+/// Parse `-- step: <name>` delimited SQL blocks from the SQL body
+fn parse_step_sql(raw_sql: &str) -> Result<BTreeMap<String, String>, StoredQueryError> {
+    let mut steps = BTreeMap::new();
+    let mut current_name: Option<String> = None;
+    let mut current_sql = String::new();
+
+    for line in raw_sql.lines() {
+        let trimmed = line.trim();
+        if let Some(name) = trimmed
+            .strip_prefix("-- step:")
+            .map(|s| s.trim().to_string())
+        {
+            // Save previous step if any
+            if let Some(prev_name) = current_name.take() {
+                let sql = current_sql.trim().to_string();
+                if !sql.is_empty() {
+                    steps.insert(prev_name, sql);
+                }
+            }
+            current_name = Some(name);
+            current_sql = String::new();
+        } else if current_name.is_some() {
+            current_sql.push_str(line);
+            current_sql.push('\n');
+        }
+        // Lines before any -- step: marker are ignored
+    }
+
+    // Save final step
+    if let Some(name) = current_name {
+        let sql = current_sql.trim().to_string();
+        if !sql.is_empty() {
+            steps.insert(name, sql);
+        }
+    }
+
+    Ok(steps)
 }
 
 /// Parse YAML front matter from file contents
@@ -834,5 +1061,183 @@ SELECT VALUE COUNT(1) FROM c
         assert!(query.metadata.params.is_empty());
         let resolved = query.resolve_params(&BTreeMap::new()).unwrap();
         assert!(resolved.is_empty());
+    }
+
+    // --- Multi-step tests ---
+
+    const MULTI_STEP_PARALLEL: &str = r#"---
+description: Order with line items
+database: mydb
+params:
+  - name: orderId
+    type: string
+steps:
+  - name: header
+    container: order-headers
+  - name: lines
+    container: order-lines
+template: |
+  Order: {{ header[0].orderId }}
+  {% for line in lines %}
+  {{ line.productName }}
+  {% endfor %}
+---
+-- step: header
+SELECT * FROM c WHERE c.orderId = @orderId
+
+-- step: lines
+SELECT * FROM c WHERE c.orderId = @orderId ORDER BY c.lineNumber
+"#;
+
+    const MULTI_STEP_CHAIN: &str = r#"---
+description: Customer orders by name
+database: mydb
+params:
+  - name: customerName
+    type: string
+steps:
+  - name: customer
+    container: customers
+  - name: orders
+    container: orders
+template: |
+  Customer: {{ customer[0].name }}
+  {% for order in orders %}
+  {{ order.orderId }}
+  {% endfor %}
+---
+-- step: customer
+SELECT TOP 1 * FROM c WHERE c.name = @customerName
+
+-- step: orders
+SELECT * FROM c WHERE c.customerId = @customer.id ORDER BY c.date DESC
+"#;
+
+    #[test]
+    fn test_parse_multi_step_parallel() {
+        let query = StoredQuery::parse("order-detail", MULTI_STEP_PARALLEL).unwrap();
+        assert!(query.is_multi_step());
+        assert!(query.sql.is_empty());
+
+        let steps = query.metadata.steps.as_ref().unwrap();
+        assert_eq!(steps.len(), 2);
+        assert_eq!(steps[0].name, "header");
+        assert_eq!(steps[0].container, "order-headers");
+        assert_eq!(steps[1].name, "lines");
+        assert_eq!(steps[1].container, "order-lines");
+
+        assert_eq!(query.step_queries.len(), 2);
+        assert!(query.step_queries["header"].contains("@orderId"));
+        assert!(query.step_queries["lines"].contains("ORDER BY"));
+    }
+
+    #[test]
+    fn test_parse_multi_step_chain() {
+        let query = StoredQuery::parse("customer-orders", MULTI_STEP_CHAIN).unwrap();
+        assert!(query.is_multi_step());
+
+        assert!(query.step_queries["orders"].contains("@customer.id"));
+    }
+
+    #[test]
+    fn test_multi_step_execution_order_parallel() {
+        let query = StoredQuery::parse("order-detail", MULTI_STEP_PARALLEL).unwrap();
+        let layers = query.execution_order().unwrap();
+        // Both steps use only @param references, so they should be in one layer
+        assert_eq!(layers.len(), 1);
+        assert_eq!(layers[0].len(), 2);
+    }
+
+    #[test]
+    fn test_multi_step_execution_order_chain() {
+        let query = StoredQuery::parse("customer-orders", MULTI_STEP_CHAIN).unwrap();
+        let layers = query.execution_order().unwrap();
+        // customer first, then orders (depends on @customer.id)
+        assert_eq!(layers.len(), 2);
+        assert_eq!(layers[0], vec!["customer"]);
+        assert_eq!(layers[1], vec!["orders"]);
+    }
+
+    #[test]
+    fn test_find_step_references() {
+        let step_names = vec!["customer".to_string(), "orders".to_string()];
+        let sql = "SELECT * FROM c WHERE c.customerId = @customer.id AND c.status = @status";
+        let refs = StoredQuery::find_step_references(sql, &step_names);
+        assert_eq!(refs, vec![("customer".to_string(), "id".to_string())]);
+    }
+
+    #[test]
+    fn test_find_step_references_no_matches() {
+        let step_names = vec!["customer".to_string()];
+        let sql = "SELECT * FROM c WHERE c.status = @status";
+        let refs = StoredQuery::find_step_references(sql, &step_names);
+        assert!(refs.is_empty());
+    }
+
+    #[test]
+    fn test_multi_step_roundtrip() {
+        let query = StoredQuery::parse("order-detail", MULTI_STEP_PARALLEL).unwrap();
+        let contents = query.to_file_contents().unwrap();
+        let reparsed = StoredQuery::parse("order-detail", &contents).unwrap();
+
+        assert!(reparsed.is_multi_step());
+        assert_eq!(
+            reparsed.metadata.steps.as_ref().unwrap().len(),
+            query.metadata.steps.as_ref().unwrap().len()
+        );
+        assert_eq!(reparsed.step_queries.len(), query.step_queries.len());
+        for (name, sql) in &query.step_queries {
+            assert_eq!(reparsed.step_queries[name], *sql);
+        }
+    }
+
+    #[test]
+    fn test_multi_step_missing_sql() {
+        let contents = r#"---
+description: test
+steps:
+  - name: step1
+    container: c1
+  - name: step2
+    container: c2
+---
+-- step: step1
+SELECT * FROM c
+"#;
+        let result = StoredQuery::parse("test", contents);
+        assert!(matches!(
+            result,
+            Err(StoredQueryError::MissingStepSql { .. })
+        ));
+    }
+
+    #[test]
+    fn test_multi_step_unknown_marker() {
+        let contents = r#"---
+description: test
+steps:
+  - name: step1
+    container: c1
+---
+-- step: step1
+SELECT * FROM c
+
+-- step: unknown
+SELECT * FROM c
+"#;
+        let result = StoredQuery::parse("test", contents);
+        assert!(matches!(
+            result,
+            Err(StoredQueryError::UnknownStepMarker { .. })
+        ));
+    }
+
+    #[test]
+    fn test_single_step_backward_compat() {
+        // Existing single-step queries should still work exactly as before
+        let query = StoredQuery::parse("recent-users", EXAMPLE_QUERY).unwrap();
+        assert!(!query.is_multi_step());
+        assert!(!query.sql.is_empty());
+        assert!(query.step_queries.is_empty());
     }
 }

@@ -90,6 +90,7 @@ fn create(name: &str, project: bool) -> Result<()> {
         description: "TODO: describe what this query does".to_string(),
         database: None,
         container: None,
+        steps: None,
         params: Vec::new(),
         template: None,
         template_file: None,
@@ -238,36 +239,41 @@ async fn generate(
         anyhow::anyhow!("AI is not configured. Run `cosq ai init` to set up an AI provider.")
     })?;
 
-    // --- Step 1-2: Resolve database and container ---
+    // --- Step 1: Resolve database ---
     let client = cosq_client::cosmos::CosmosClient::new(&config.account.endpoint).await?;
 
     let (database, db_changed) =
         super::common::resolve_database(&client, &mut config, cli_db, None).await?;
-    let (container, ctr_changed) =
-        super::common::resolve_container(&client, &mut config, &database, cli_container, None)
-            .await?;
 
-    if db_changed || ctr_changed {
+    if db_changed {
         config.save()?;
     }
 
-    // --- Step 3: Sample documents for schema context ---
-    if !quiet {
-        eprintln!(
-            "{}",
-            format!("Sampling documents from {container}...").dimmed()
-        );
-    }
-    let sample_result = client
-        .query(&database, &container, "SELECT TOP 3 * FROM c")
-        .await
-        .context("failed to sample documents for schema context")?;
-
-    let sample_json = if sample_result.documents.is_empty() {
-        "(container is empty — no sample documents available)".to_string()
+    // --- Step 2: Resolve containers (one or many) ---
+    let containers = if let Some(ctr) = cli_container {
+        vec![ctr]
     } else {
-        format_sample_documents(&sample_result.documents)
+        pick_containers_interactive(&client, &database).await?
     };
+
+    // --- Step 3: Sample documents from all containers ---
+    let mut container_samples: Vec<(String, String)> = Vec::new();
+    for ctr in &containers {
+        if !quiet {
+            eprintln!("{}", format!("Sampling documents from {ctr}...").dimmed());
+        }
+        let sample_result = client
+            .query(&database, ctr, "SELECT TOP 3 * FROM c")
+            .await
+            .with_context(|| format!("failed to sample documents from {ctr}"))?;
+
+        let sample_json = if sample_result.documents.is_empty() {
+            "(container is empty)".to_string()
+        } else {
+            format_sample_documents(&sample_result.documents)
+        };
+        container_samples.push((ctr.clone(), sample_json));
+    }
 
     // --- Step 4: Get description (from arg or interactive prompt) ---
     let description = if let Some(desc) = description {
@@ -281,7 +287,7 @@ async fn generate(
     };
 
     // --- Step 5-6: Build prompt and call AI (with conversation loop) ---
-    let system_prompt = build_system_prompt(&database, &container, &sample_json);
+    let system_prompt = build_system_prompt(&database, &container_samples);
 
     let user_prompt = format!("Generate a .cosq stored query for: {description}");
 
@@ -326,7 +332,6 @@ async fn generate(
                         .interact_text()
                         .context("input cancelled")?;
 
-                // Build follow-up prompt with full context
                 conversation_prompt = format!(
                     "Original request: {description}\n\n\
                      You asked:\n{content}\n\n\
@@ -355,10 +360,12 @@ async fn generate(
     })?;
 
     // --- Step 7: Finalize and save ---
-
-    // Auto-populate database and container metadata
     query.metadata.database = Some(database);
-    query.metadata.container = Some(container);
+
+    // For single-step queries, set container if there was only one
+    if !query.is_multi_step() && containers.len() == 1 {
+        query.metadata.container = Some(containers[0].clone());
+    }
 
     // Add AI provenance
     let provider_info = match ai_config.effective_model() {
@@ -371,39 +378,7 @@ async fn generate(
     let suggested_name = generate_filename(&description);
 
     // Show preview
-    eprintln!("\n{}", "Generated query:".bold());
-    eprintln!("  {} {}", "Name:".dimmed(), suggested_name.green());
-    eprintln!(
-        "  {} {}",
-        "Description:".dimmed(),
-        query.metadata.description
-    );
-    if !query.metadata.params.is_empty() {
-        eprintln!("  {}:", "Parameters".dimmed());
-        for p in &query.metadata.params {
-            let default_str = p
-                .default
-                .as_ref()
-                .map(|d| format!(" (default: {d})"))
-                .unwrap_or_default();
-            eprintln!(
-                "    --{} <{}>{}",
-                p.name,
-                p.param_type,
-                default_str.dimmed()
-            );
-        }
-    }
-    eprintln!("\n  {}:", "SQL".dimmed());
-    for line in query.sql.lines() {
-        eprintln!("    {}", line.cyan());
-    }
-    if let Some(ref tmpl) = query.metadata.template {
-        eprintln!("\n  {}:", "Template".dimmed());
-        for line in tmpl.lines() {
-            eprintln!("    {}", line);
-        }
-    }
+    show_query_preview(&query, &suggested_name);
 
     // Ask for name (or accept suggestion)
     let name: String = dialoguer::Input::with_theme(&dialoguer::theme::ColorfulTheme::default())
@@ -424,32 +399,253 @@ async fn generate(
 
     println!("{} Saved to {}", "OK".green().bold(), path.display());
 
-    // Offer to open in editor
-    let edit = dialoguer::Confirm::with_theme(&dialoguer::theme::ColorfulTheme::default())
-        .with_prompt("Open in editor to review?")
-        .default(true)
+    // Offer to run or edit
+    let action = dialoguer::FuzzySelect::with_theme(&dialoguer::theme::ColorfulTheme::default())
+        .with_prompt("What next?")
+        .items(&["Run it now", "Open in editor", "Done"])
+        .default(0)
         .interact()
-        .context("confirmation cancelled")?;
+        .context("selection cancelled")?;
 
-    if edit {
-        open_in_editor(&path)?;
+    match action {
+        0 => {
+            // Run the query
+            eprintln!();
+            super::run::run(super::run::RunArgs {
+                name: Some(name),
+                params: Vec::new(),
+                output: None,
+                db: None,
+                container: None,
+                template: None,
+                quiet,
+            })
+            .await?;
+        }
+        1 => {
+            open_in_editor(&path)?;
+        }
+        _ => {}
     }
 
     Ok(())
 }
 
+/// Interactively pick one or more containers from a database
+async fn pick_containers_interactive(
+    client: &cosq_client::cosmos::CosmosClient,
+    database: &str,
+) -> Result<Vec<String>> {
+    let all_containers = client.list_containers(database).await?;
+    if all_containers.is_empty() {
+        bail!("No containers found in database '{database}'.");
+    }
+
+    if all_containers.len() == 1 {
+        eprintln!(
+            "{} {}",
+            "Using container:".bold(),
+            all_containers[0].green()
+        );
+        return Ok(all_containers);
+    }
+
+    // Ask if single or multi-container
+    let mode = dialoguer::FuzzySelect::with_theme(&dialoguer::theme::ColorfulTheme::default())
+        .with_prompt("Query scope")
+        .items(&["Single container", "Multiple containers (multi-step query)"])
+        .default(0)
+        .interact()
+        .context("selection cancelled")?;
+
+    if mode == 0 {
+        // Single container
+        let selection =
+            dialoguer::FuzzySelect::with_theme(&dialoguer::theme::ColorfulTheme::default())
+                .with_prompt("Select a container")
+                .items(&all_containers)
+                .default(0)
+                .interact()
+                .context("container selection cancelled")?;
+        Ok(vec![all_containers[selection].clone()])
+    } else {
+        // Multi-select containers
+        let selections =
+            dialoguer::MultiSelect::with_theme(&dialoguer::theme::ColorfulTheme::default())
+                .with_prompt("Select containers (Space to toggle, Enter to confirm)")
+                .items(&all_containers)
+                .interact()
+                .context("container selection cancelled")?;
+
+        if selections.is_empty() {
+            bail!("No containers selected.");
+        }
+
+        let selected: Vec<String> = selections
+            .into_iter()
+            .map(|i| all_containers[i].clone())
+            .collect();
+
+        for ctr in &selected {
+            eprintln!("  {} {}", "▸".dimmed(), ctr.green());
+        }
+
+        Ok(selected)
+    }
+}
+
+/// Show a preview of the generated query
+fn show_query_preview(query: &StoredQuery, suggested_name: &str) {
+    eprintln!("\n{}", "Generated query:".bold());
+    eprintln!("  {} {}", "Name:".dimmed(), suggested_name.green());
+    eprintln!(
+        "  {} {}",
+        "Description:".dimmed(),
+        query.metadata.description
+    );
+
+    if query.is_multi_step() {
+        eprintln!("  {}:", "Steps".dimmed());
+        for step in query.metadata.steps.as_ref().unwrap() {
+            eprintln!("    {} → {}", step.name.cyan(), step.container.dimmed());
+        }
+    }
+
+    if !query.metadata.params.is_empty() {
+        eprintln!("  {}:", "Parameters".dimmed());
+        for p in &query.metadata.params {
+            let default_str = p
+                .default
+                .as_ref()
+                .map(|d| format!(" (default: {d})"))
+                .unwrap_or_default();
+            eprintln!(
+                "    --{} <{}>{}",
+                p.name,
+                p.param_type,
+                default_str.dimmed()
+            );
+        }
+    }
+
+    if query.is_multi_step() {
+        for step in query.metadata.steps.as_ref().unwrap() {
+            if let Some(sql) = query.step_queries.get(&step.name) {
+                eprintln!("\n  {} {}:", "SQL".dimmed(), step.name.cyan());
+                for line in sql.lines() {
+                    eprintln!("    {}", line.cyan());
+                }
+            }
+        }
+    } else {
+        eprintln!("\n  {}:", "SQL".dimmed());
+        for line in query.sql.lines() {
+            eprintln!("    {}", line.cyan());
+        }
+    }
+
+    if let Some(ref tmpl) = query.metadata.template {
+        eprintln!("\n  {}:", "Template".dimmed());
+        for line in tmpl.lines() {
+            eprintln!("    {}", line);
+        }
+    }
+}
+
 /// Build the system prompt with schema context from sampled documents.
-fn build_system_prompt(database: &str, container: &str, sample_json: &str) -> String {
+/// Supports both single-container and multi-container contexts.
+fn build_system_prompt(database: &str, container_samples: &[(String, String)]) -> String {
+    let is_multi = container_samples.len() > 1;
+
+    // Build container context section
+    let mut container_section = String::new();
+    for (name, sample_json) in container_samples {
+        container_section.push_str(&format!(
+            "\nContainer: \"{name}\"\nSample documents:\n{sample_json}\n"
+        ));
+    }
+
+    let multi_step_rules = if is_multi {
+        r#"
+MULTI-STEP QUERY RULES — when the user's request involves data from multiple containers:
+- Use a `steps:` section in the YAML metadata listing each step with a name and container
+- The SQL body uses `-- step: <name>` markers to separate each step's SQL
+- Steps that share the same @param inputs run in PARALLEL automatically
+- A step can reference another step's result using @step.field syntax (e.g., @customer.id)
+  This creates a DEPENDENCY — the referenced step runs first, then the value from its first result row is injected
+- Do NOT create fan-out queries (one step running per row of another). This is NOT supported.
+- Each step's results are available in the template as a top-level array by step name
+
+Multi-step example (parallel — same input):
+---
+description: Order with line items
+database: mydb
+params:
+  - name: orderId
+    type: string
+steps:
+  - name: header
+    container: order-headers
+  - name: lines
+    container: order-lines
+template: |
+  Order: {{ header[0].orderId }}
+  Customer: {{ header[0].customerName }}
+  {% for line in lines %}
+  {{ line.productName }}  {{ line.quantity }}  ${{ line.price }}
+  {% endfor %}
+---
+-- step: header
+SELECT * FROM c WHERE c.orderId = @orderId
+
+-- step: lines
+SELECT * FROM c WHERE c.orderId = @orderId ORDER BY c.lineNumber
+
+Multi-step example (chain — step 2 depends on step 1):
+---
+description: Orders for customer by name
+params:
+  - name: customerName
+    type: string
+steps:
+  - name: customer
+    container: customers
+  - name: orders
+    container: orders
+template: |
+  Customer: {{ customer[0].name }} ({{ customer[0].id }})
+  {% for order in orders %}
+  #{{ order.orderId }}  {{ order.date }}  ${{ order.total }}
+  {% endfor %}
+---
+-- step: customer
+SELECT TOP 1 * FROM c WHERE c.name = @customerName
+
+-- step: orders
+SELECT * FROM c WHERE c.customerId = @customer.id ORDER BY c.date DESC
+"#
+    } else {
+        ""
+    };
+
+    let single_container_note = if !is_multi {
+        "\n- Set database and container in the YAML metadata"
+    } else {
+        "\n- Set database in the YAML metadata (containers are set per-step)"
+    };
+
+    let template_var_note = if is_multi {
+        "- For multi-step queries: each step's results are available as a top-level array by step name (e.g., {{ header[0].field }}, {% for line in lines %})"
+    } else {
+        "- Templates have access to 'documents' (array of results) and all parameter values"
+    };
+
     format!(
         r#"You are a Cosmos DB SQL query generator. You create .cosq stored query files.
 
 TARGET:
-  Database:  "{database}"
-  Container: "{container}"
-
-SAMPLE DOCUMENTS from this container:
-{sample_json}
-
+  Database: "{database}"
+{container_section}
 FORMAT — .cosq files use YAML front matter between --- delimiters, followed by the SQL query.
 
 SQL RULES:
@@ -457,12 +653,11 @@ SQL RULES:
 - Use 'c' as the container alias (e.g., SELECT * FROM c)
 - Use Cosmos DB SQL syntax (TOP not LIMIT, no OFFSET, use DateTimeAdd/GetCurrentDateTime for dates)
 - Extract variable parts as @param parameters
-- Parameters: define in params section with name, type (string/number/bool), description, and optional default/choices/min/max
-- Set database and container in the YAML metadata
-
+- Parameters: define in params section with name, type (string/number/bool), description, and optional default/choices/min/max{single_container_note}
+{multi_step_rules}
 OUTPUT TEMPLATE RULES — ALWAYS include a MiniJinja template in the .cosq file:
 - Templates use {{{{ variable }}}} syntax and {{% for doc in documents %}} loops
-- Templates have access to 'documents' (array of results) and all parameter values
+- {template_var_note}
 
 Choose the template style based on the query:
 - MULTIPLE results (lists, searches, TOP N where N > 1): use a readable table layout

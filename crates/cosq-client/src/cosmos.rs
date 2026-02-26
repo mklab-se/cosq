@@ -64,6 +64,7 @@ struct PartitionKeyRange {
 }
 
 /// Client for the Cosmos DB data plane REST API.
+#[derive(Clone)]
 pub struct CosmosClient {
     http: reqwest::Client,
     endpoint: String,

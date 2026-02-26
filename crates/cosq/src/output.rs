@@ -44,18 +44,71 @@ pub fn write_results(
     }
 }
 
+/// Create a MiniJinja environment with custom filters registered.
+fn create_template_env() -> minijinja::Environment<'static> {
+    let mut env = minijinja::Environment::new();
+    env.add_filter("truncate", truncate_filter);
+    env.add_filter("pad", pad_filter);
+    env
+}
+
+/// MiniJinja filter: truncate a string to a maximum length, appending "..." if truncated.
+fn truncate_filter(value: String, length: Option<usize>) -> String {
+    let max = length.unwrap_or(255);
+    if value.len() <= max {
+        value
+    } else if max <= 3 {
+        value[..max].to_string()
+    } else {
+        format!("{}...", &value[..max - 3])
+    }
+}
+
+/// MiniJinja filter: pad a string to a minimum width (left-aligned).
+fn pad_filter(value: String, width: Option<usize>) -> String {
+    let w = width.unwrap_or(0);
+    format!("{value:<w$}")
+}
+
 /// Render a MiniJinja template against query results and parameters
 pub fn render_template(
     template_str: &str,
     documents: &[Value],
     params: &std::collections::BTreeMap<String, Value>,
 ) -> Result<String> {
-    let mut env = minijinja::Environment::new();
+    let mut env = create_template_env();
     env.add_template("output", template_str)?;
     let tmpl = env.get_template("output")?;
 
     let mut context = std::collections::BTreeMap::new();
     context.insert("documents".to_string(), Value::Array(documents.to_vec()));
+
+    // Add parameters as top-level template variables
+    for (key, value) in params {
+        context.insert(key.clone(), value.clone());
+    }
+
+    let rendered = tmpl.render(context)?;
+    Ok(rendered)
+}
+
+/// Render a MiniJinja template for multi-step queries.
+/// Each step's results are available as a top-level variable by step name.
+pub fn render_multi_step_template(
+    template_str: &str,
+    step_results: &std::collections::BTreeMap<String, Vec<Value>>,
+    params: &std::collections::BTreeMap<String, Value>,
+) -> Result<String> {
+    let mut env = create_template_env();
+    env.add_template("output", template_str)?;
+    let tmpl = env.get_template("output")?;
+
+    let mut context = std::collections::BTreeMap::new();
+
+    // Add step results as top-level template variables (step_name → documents array)
+    for (step_name, docs) in step_results {
+        context.insert(step_name.clone(), Value::Array(docs.clone()));
+    }
 
     // Add parameters as top-level template variables
     for (key, value) in params {
@@ -295,6 +348,40 @@ mod tests {
         let result = render_template(template, &docs, &params).unwrap();
         assert!(result.contains("Alice"));
         assert!(result.contains("Bob"));
+    }
+
+    #[test]
+    fn test_render_template_truncate_filter() {
+        let docs = vec![json!({"name": "This is a very long name that should be truncated"})];
+        let params = std::collections::BTreeMap::new();
+        let template = "{% for doc in documents %}{{ doc.name | truncate(20) }}{% endfor %}";
+        let result = render_template(template, &docs, &params).unwrap();
+        assert_eq!(result, "This is a very lo...");
+    }
+
+    #[test]
+    fn test_render_template_pad_filter() {
+        let docs = vec![json!({"name": "hi"})];
+        let params = std::collections::BTreeMap::new();
+        let template = "{% for doc in documents %}|{{ doc.name | pad(10) }}|{% endfor %}";
+        let result = render_template(template, &docs, &params).unwrap();
+        assert_eq!(result, "|hi        |");
+    }
+
+    #[test]
+    fn test_render_multi_step_template() {
+        let mut step_results = std::collections::BTreeMap::new();
+        step_results.insert(
+            "orders".to_string(),
+            vec![json!({"id": "1"}), json!({"id": "2"})],
+        );
+        step_results.insert("customer".to_string(), vec![json!({"name": "Alice"})]);
+        let params = std::collections::BTreeMap::new();
+        let template = "{{ customer[0].name }}: {% for o in orders %}{{ o.id }} {% endfor %}";
+        let result = render_multi_step_template(template, &step_results, &params).unwrap();
+        assert!(result.contains("Alice"));
+        assert!(result.contains("1"));
+        assert!(result.contains("2"));
     }
 
     #[test]
