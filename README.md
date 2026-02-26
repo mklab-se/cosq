@@ -63,6 +63,18 @@ cosq run recent-users -- --days 7
 cosq run
 ```
 
+## AI Query Generation
+
+Generate stored queries from natural language using your preferred AI provider:
+
+```bash
+# Set up AI (auto-detects Claude, Codex, Copilot, Ollama, or Azure OpenAI)
+cosq ai init
+
+# Generate a query from a description
+cosq queries generate "active users by region in the last 30 days"
+```
+
 See [INSTALL.md](INSTALL.md) for all installation methods, shell completions, and platform-specific instructions.
 
 ## Development

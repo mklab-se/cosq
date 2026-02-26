@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-02-26
+
+### Added
+
+- **Multi-provider AI support** — `cosq queries generate` now works with local CLI AI agents (Claude, Codex, Copilot), Ollama local LLMs, and Azure OpenAI API. No longer requires an Azure subscription for AI features
+- **`cosq ai init` command** — interactive setup for AI provider configuration. Auto-detects available tools on the system, presents a fuzzy-select list, and guides through provider-specific setup (model selection, Ollama model picker, Azure OpenAI account/deployment input)
+- **Local AI agent integration (`cosq-client/local_agent.rs`)** — invokes Claude (`claude -p`), Codex (`codex exec`), and Copilot (`copilot -p`) as subprocesses with provider-specific flags for non-interactive operation
+- **Ollama client (`cosq-client/ollama.rs`)** — direct HTTP API integration for local LLMs via Ollama. Lists installed models for interactive selection, sends chat completions with system/user prompts
+- **Unified AI dispatcher (`cosq-client/ai.rs`)** — single `generate_text()` function that routes to the configured provider (Azure OpenAI, local CLI agent, or Ollama)
+- **`AiProvider` enum** — `azure-openai`, `claude`, `codex`, `copilot`, `ollama` with recommended default models per provider (sonnet for Claude, o4-mini for Codex, gpt-4.1 for Copilot)
+- **Configurable model selection** — optional `model` field in AI config overrides the provider default. Each provider suggests a recommended model during `cosq ai init`
+
+### Changed
+
+- AI config now supports `provider` and `model` fields (backward-compatible — existing configs without `provider` default to `azure-openai`)
+- `cosq queries generate` error message now directs to `cosq ai init` instead of manual YAML editing
+- `generated_by` metadata now includes provider name and model (e.g., "Claude (sonnet)")
+
 ## [0.3.0] - 2026-02-26
 
 ### Added

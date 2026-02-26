@@ -227,18 +227,18 @@ async fn generate(description: &str, project: bool, quiet: bool) -> Result<()> {
     let config = Config::load()?;
 
     let ai_config = config.ai.as_ref().ok_or_else(|| {
-        anyhow::anyhow!(
-            "AI is not configured. Add an `ai` section to your config:\n\n\
-             ai:\n\
-             \x20 account: <azure-openai-account>\n\
-             \x20 deployment: <model-deployment-name>"
-        )
+        anyhow::anyhow!("AI is not configured. Run `cosq ai init` to set up an AI provider.")
     })?;
 
-    let ai_client = cosq_client::openai::AzureOpenAIClient::from_config(ai_config).await?;
-
     if !quiet {
-        eprintln!("{}", "Generating stored query...".dimmed());
+        eprintln!(
+            "{}",
+            format!(
+                "Generating stored query via {}...",
+                ai_config.provider.display_name()
+            )
+            .dimmed()
+        );
     }
 
     let system_prompt = r#"You are a Cosmos DB SQL query generator. Generate a stored query in .cosq format.
@@ -286,8 +286,7 @@ ORDER BY c.displayName
 
     let user_prompt = format!("Generate a .cosq stored query for: {description}");
 
-    let response = ai_client
-        .chat_completion(system_prompt, &user_prompt, 0.3, 2000)
+    let response = cosq_client::ai::generate_text(ai_config, system_prompt, &user_prompt)
         .await
         .context("failed to generate query")?;
 
@@ -305,8 +304,12 @@ ORDER BY c.displayName
     let mut query = StoredQuery::parse("generated", content)
         .context("AI generated an invalid query file. Try rephrasing your description.")?;
 
-    // Add AI metadata
-    query.metadata.generated_by = Some("ai".to_string());
+    // Add AI metadata with provider and model info
+    let provider_info = match ai_config.effective_model() {
+        Some(model) => format!("{} ({})", ai_config.provider.display_name(), model),
+        None => ai_config.provider.display_name().to_string(),
+    };
+    query.metadata.generated_by = Some(provider_info);
     query.metadata.generated_from = Some(description.to_string());
 
     // Generate a filename from the description

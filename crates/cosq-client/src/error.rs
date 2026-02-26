@@ -25,6 +25,9 @@ pub enum ClientError {
     #[error("Azure OpenAI error: {message}")]
     OpenAI { message: String },
 
+    #[error("local AI agent error: {message}")]
+    LocalAgent { message: String },
+
     #[error("{0}")]
     Other(String),
 }
@@ -58,6 +61,12 @@ impl ClientError {
 
     pub fn openai(msg: impl Into<String>) -> Self {
         Self::OpenAI {
+            message: msg.into(),
+        }
+    }
+
+    pub fn local_agent(msg: impl Into<String>) -> Self {
+        Self::LocalAgent {
             message: msg.into(),
         }
     }

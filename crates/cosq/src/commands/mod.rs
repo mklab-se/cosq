@@ -1,5 +1,6 @@
 //! CLI command implementations
 
+pub mod ai;
 pub mod auth;
 pub mod completion;
 pub mod init;

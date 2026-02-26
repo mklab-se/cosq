@@ -129,6 +129,12 @@ pub enum Commands {
         shell: Shell,
     },
 
+    /// Configure AI provider for query generation
+    Ai {
+        #[command(subcommand)]
+        command: AiCommands,
+    },
+
     /// Show version information
     Version,
 }
@@ -182,6 +188,12 @@ pub enum QueriesCommands {
         #[arg(long)]
         project: bool,
     },
+}
+
+#[derive(clap::Subcommand)]
+pub enum AiCommands {
+    /// Set up AI provider for query generation (local CLI agents, Ollama, or Azure OpenAI)
+    Init,
 }
 
 #[derive(clap::Subcommand)]
@@ -257,6 +269,7 @@ impl Cli {
                 .await
             }
             Some(Commands::Auth { command }) => crate::commands::auth::run(command).await,
+            Some(Commands::Ai { command }) => crate::commands::ai::run(command).await,
             Some(Commands::Completion { shell }) => {
                 crate::commands::completion::generate_completions(shell);
                 Ok(())

@@ -25,6 +25,21 @@ pub struct AzureOpenAIClient {
 impl AzureOpenAIClient {
     /// Create a new client from AI config, acquiring a token via Azure CLI.
     pub async fn from_config(config: &AiConfig) -> Result<Self, ClientError> {
+        let endpoint = config.openai_endpoint().ok_or_else(|| {
+            ClientError::openai(
+                "Azure OpenAI account not configured. Run `cosq ai init` to set up AI.",
+            )
+        })?;
+        let deployment = config
+            .deployment
+            .as_ref()
+            .ok_or_else(|| {
+                ClientError::openai(
+                    "Azure OpenAI deployment not configured. Run `cosq ai init` to set up AI.",
+                )
+            })?
+            .clone();
+
         let token = AzCliAuth::get_token(COGNITIVE_SERVICES_RESOURCE).await?;
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(60))
@@ -33,8 +48,8 @@ impl AzureOpenAIClient {
         Ok(Self {
             http,
             token,
-            endpoint: config.openai_endpoint(),
-            deployment: config.deployment.clone(),
+            endpoint,
+            deployment,
             api_version: config.api_version.clone(),
         })
     }

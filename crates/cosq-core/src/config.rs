@@ -45,16 +45,111 @@ pub struct AccountConfig {
     pub endpoint: String,
 }
 
-/// Azure OpenAI configuration for AI-powered features
+/// AI provider backend for query generation
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AiProvider {
+    /// Azure OpenAI API (requires Azure subscription and deployment)
+    AzureOpenai,
+    /// Anthropic Claude via local CLI
+    Claude,
+    /// OpenAI Codex via local CLI
+    Codex,
+    /// GitHub Copilot via local CLI
+    Copilot,
+    /// Local LLMs via Ollama
+    Ollama,
+}
+
+impl Default for AiProvider {
+    fn default() -> Self {
+        Self::AzureOpenai
+    }
+}
+
+impl std::fmt::Display for AiProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.display_name())
+    }
+}
+
+impl AiProvider {
+    /// Human-readable name for display
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            Self::AzureOpenai => "Azure OpenAI",
+            Self::Claude => "Claude",
+            Self::Codex => "Codex",
+            Self::Copilot => "Copilot",
+            Self::Ollama => "Ollama",
+        }
+    }
+
+    /// Short description of the provider
+    pub fn description(&self) -> &'static str {
+        match self {
+            Self::AzureOpenai => "Azure OpenAI API (requires Azure subscription)",
+            Self::Claude => "Anthropic Claude via local CLI",
+            Self::Codex => "OpenAI Codex via local CLI",
+            Self::Copilot => "GitHub Copilot via local CLI",
+            Self::Ollama => "Local LLMs via Ollama",
+        }
+    }
+
+    /// Binary name to check for availability (None for API-only providers)
+    pub fn binary_name(&self) -> Option<&'static str> {
+        match self {
+            Self::AzureOpenai => None,
+            Self::Claude => Some("claude"),
+            Self::Codex => Some("codex"),
+            Self::Copilot => Some("copilot"),
+            Self::Ollama => Some("ollama"),
+        }
+    }
+
+    /// Default model recommendation for this provider (None if user must choose)
+    pub fn default_model(&self) -> Option<&'static str> {
+        match self {
+            Self::AzureOpenai => None, // uses deployment name from config
+            Self::Claude => Some("sonnet"),
+            Self::Codex => Some("o4-mini"),
+            Self::Copilot => Some("gpt-4.1"),
+            Self::Ollama => None, // user must select from installed models
+        }
+    }
+
+    /// All known providers
+    pub fn all() -> &'static [AiProvider] {
+        &[
+            Self::Claude,
+            Self::Codex,
+            Self::Copilot,
+            Self::Ollama,
+            Self::AzureOpenai,
+        ]
+    }
+}
+
+/// AI configuration for natural language query generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiConfig {
-    /// Azure AI Services account name
-    pub account: String,
+    /// AI provider backend
+    #[serde(default)]
+    pub provider: AiProvider,
 
-    /// Model deployment name (e.g., "gpt-4o-mini")
-    pub deployment: String,
+    /// Model to use (optional, provider-specific defaults applied at runtime)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 
-    /// Custom endpoint URL (overrides name-based URL)
+    /// Azure AI Services account name (Azure OpenAI only)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
+
+    /// Model deployment name, e.g., "gpt-4o-mini" (Azure OpenAI only)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deployment: Option<String>,
+
+    /// Custom endpoint URL — overrides name-based URL (Azure OpenAI only)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<String>,
 
@@ -69,6 +164,10 @@ pub struct AiConfig {
     /// Azure OpenAI API version
     #[serde(default = "default_openai_api_version")]
     pub api_version: String,
+
+    /// Ollama server URL (defaults to http://localhost:11434)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ollama_url: Option<String>,
 }
 
 fn default_openai_api_version() -> String {
@@ -76,13 +175,29 @@ fn default_openai_api_version() -> String {
 }
 
 impl AiConfig {
-    /// Get the Azure OpenAI endpoint URL
-    pub fn openai_endpoint(&self) -> String {
+    /// Get the Azure OpenAI endpoint URL (only valid for Azure OpenAI provider)
+    pub fn openai_endpoint(&self) -> Option<String> {
         if let Some(ref ep) = self.endpoint {
-            ep.trim_end_matches('/').to_string()
+            Some(ep.trim_end_matches('/').to_string())
         } else {
-            format!("https://{}.openai.azure.com", self.account)
+            self.account
+                .as_ref()
+                .map(|a| format!("https://{a}.openai.azure.com"))
         }
+    }
+
+    /// Get the effective model: configured model or provider default
+    pub fn effective_model(&self) -> Option<String> {
+        self.model
+            .clone()
+            .or_else(|| self.provider.default_model().map(String::from))
+    }
+
+    /// Get the Ollama base URL (defaults to localhost)
+    pub fn ollama_base_url(&self) -> String {
+        self.ollama_url
+            .clone()
+            .unwrap_or_else(|| "http://localhost:11434".to_string())
     }
 }
 
@@ -308,12 +423,15 @@ account:
             database: None,
             container: None,
             ai: Some(AiConfig {
-                account: "my-ai".into(),
-                deployment: "gpt-4o-mini".into(),
+                provider: AiProvider::AzureOpenai,
+                model: None,
+                account: Some("my-ai".into()),
+                deployment: Some("gpt-4o-mini".into()),
                 endpoint: None,
                 subscription: None,
                 resource_group: None,
                 api_version: "2024-12-01-preview".into(),
+                ollama_url: None,
             }),
         };
 
@@ -323,37 +441,46 @@ account:
 
         let parsed: Config = serde_yaml::from_str(&yaml).unwrap();
         let ai = parsed.ai.unwrap();
-        assert_eq!(ai.account, "my-ai");
-        assert_eq!(ai.deployment, "gpt-4o-mini");
+        assert_eq!(ai.account.as_deref(), Some("my-ai"));
+        assert_eq!(ai.deployment.as_deref(), Some("gpt-4o-mini"));
     }
 
     #[test]
     fn test_ai_config_endpoint() {
         let config = AiConfig {
-            account: "my-ai-services".into(),
-            deployment: "gpt-4o-mini".into(),
+            provider: AiProvider::AzureOpenai,
+            model: None,
+            account: Some("my-ai-services".into()),
+            deployment: Some("gpt-4o-mini".into()),
             endpoint: None,
             subscription: None,
             resource_group: None,
             api_version: "2024-12-01-preview".into(),
+            ollama_url: None,
         };
         assert_eq!(
-            config.openai_endpoint(),
-            "https://my-ai-services.openai.azure.com"
+            config.openai_endpoint().as_deref(),
+            Some("https://my-ai-services.openai.azure.com")
         );
     }
 
     #[test]
     fn test_ai_config_endpoint_override() {
         let config = AiConfig {
-            account: "my-ai-services".into(),
-            deployment: "gpt-4o-mini".into(),
+            provider: AiProvider::AzureOpenai,
+            model: None,
+            account: Some("my-ai-services".into()),
+            deployment: Some("gpt-4o-mini".into()),
             endpoint: Some("https://custom.openai.azure.com/".into()),
             subscription: None,
             resource_group: None,
             api_version: "2024-12-01-preview".into(),
+            ollama_url: None,
         };
-        assert_eq!(config.openai_endpoint(), "https://custom.openai.azure.com");
+        assert_eq!(
+            config.openai_endpoint().as_deref(),
+            Some("https://custom.openai.azure.com")
+        );
     }
 
     #[test]
@@ -368,5 +495,105 @@ database: mydb
 "#;
         let parsed: Config = serde_yaml::from_str(yaml).unwrap();
         assert!(parsed.ai.is_none());
+    }
+
+    #[test]
+    fn test_config_backward_compat_azure_ai() {
+        // Existing configs without provider field should default to azure-openai
+        let yaml = r#"
+account:
+  name: test
+  subscription: sub
+  resource_group: rg
+  endpoint: https://test.documents.azure.com:443/
+ai:
+  account: my-ai
+  deployment: gpt-4o-mini
+"#;
+        let parsed: Config = serde_yaml::from_str(yaml).unwrap();
+        let ai = parsed.ai.unwrap();
+        assert_eq!(ai.provider, AiProvider::AzureOpenai);
+        assert_eq!(ai.account.as_deref(), Some("my-ai"));
+        assert_eq!(ai.deployment.as_deref(), Some("gpt-4o-mini"));
+    }
+
+    #[test]
+    fn test_config_local_agent_provider() {
+        let yaml = r#"
+account:
+  name: test
+  subscription: sub
+  resource_group: rg
+  endpoint: https://test.documents.azure.com:443/
+ai:
+  provider: claude
+  model: sonnet
+"#;
+        let parsed: Config = serde_yaml::from_str(yaml).unwrap();
+        let ai = parsed.ai.unwrap();
+        assert_eq!(ai.provider, AiProvider::Claude);
+        assert_eq!(ai.effective_model().as_deref(), Some("sonnet"));
+        assert!(ai.account.is_none());
+    }
+
+    #[test]
+    fn test_config_ollama_provider() {
+        let yaml = r#"
+account:
+  name: test
+  subscription: sub
+  resource_group: rg
+  endpoint: https://test.documents.azure.com:443/
+ai:
+  provider: ollama
+  model: gemma3:4b
+  ollama_url: http://my-server:11434
+"#;
+        let parsed: Config = serde_yaml::from_str(yaml).unwrap();
+        let ai = parsed.ai.unwrap();
+        assert_eq!(ai.provider, AiProvider::Ollama);
+        assert_eq!(ai.effective_model().as_deref(), Some("gemma3:4b"));
+        assert_eq!(ai.ollama_base_url(), "http://my-server:11434");
+    }
+
+    #[test]
+    fn test_ai_provider_defaults() {
+        assert_eq!(AiProvider::Claude.default_model(), Some("sonnet"));
+        assert_eq!(AiProvider::Codex.default_model(), Some("o4-mini"));
+        assert_eq!(AiProvider::Copilot.default_model(), Some("gpt-4.1"));
+        assert_eq!(AiProvider::Ollama.default_model(), None);
+        assert_eq!(AiProvider::AzureOpenai.default_model(), None);
+    }
+
+    #[test]
+    fn test_effective_model_configured() {
+        let config = AiConfig {
+            provider: AiProvider::Claude,
+            model: Some("opus".into()),
+            account: None,
+            deployment: None,
+            endpoint: None,
+            subscription: None,
+            resource_group: None,
+            api_version: "2024-12-01-preview".into(),
+            ollama_url: None,
+        };
+        assert_eq!(config.effective_model().as_deref(), Some("opus"));
+    }
+
+    #[test]
+    fn test_effective_model_default() {
+        let config = AiConfig {
+            provider: AiProvider::Claude,
+            model: None,
+            account: None,
+            deployment: None,
+            endpoint: None,
+            subscription: None,
+            resource_group: None,
+            api_version: "2024-12-01-preview".into(),
+            ollama_url: None,
+        };
+        assert_eq!(config.effective_model().as_deref(), Some("sonnet"));
     }
 }
