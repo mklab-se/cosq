@@ -81,6 +81,14 @@ The actual command construction (`invoke_claude()`, `invoke_codex()`, `invoke_co
 
 **Recommendation:** Test command argument assembly as pure functions.
 
+## Potential Bug Found During Analysis
+
+**`cosq/src/output.rs:56-64` — `truncate_filter()` panics on multi-byte UTF-8**
+
+The `truncate_filter()` function uses byte-level string slicing (`value[..max]`) which will panic at runtime if the truncation point falls within a multi-byte UTF-8 character (e.g., accented characters, CJK text, emoji). This is a real correctness bug, not just a missing test — any Cosmos DB document containing non-ASCII text in a field rendered through a MiniJinja template with `| truncate` could crash the CLI.
+
+**Fix:** Use `value.char_indices()` to find the correct byte boundary, or use `value.chars().take(max).collect::<String>()`.
+
 ## Structural Gaps
 
 1. **No integration tests** — No `tests/` directory in any crate. The CLI binary is never exercised end-to-end.
