@@ -129,10 +129,10 @@ pub enum Commands {
         shell: Shell,
     },
 
-    /// Configure AI provider for query generation
+    /// Manage AI features (shows status when run without a subcommand)
     Ai {
         #[command(subcommand)]
-        command: AiCommands,
+        command: Option<AiCommands>,
     },
 
     /// Show version information
@@ -200,10 +200,17 @@ pub enum QueriesCommands {
 
 #[derive(clap::Subcommand)]
 pub enum AiCommands {
-    /// Set up AI provider for query generation (local CLI agents, Ollama, or Azure OpenAI)
-    Init,
-    /// Show current AI provider configuration
-    Status,
+    /// Test AI integration by sending a message
+    Test {
+        /// Message to send (default: "Say hello in one sentence.")
+        message: Option<String>,
+    },
+    /// Enable AI features for cosq
+    Enable,
+    /// Disable AI features for cosq
+    Disable,
+    /// Open AI configuration file in your editor
+    Config,
 }
 
 #[derive(clap::Subcommand)]

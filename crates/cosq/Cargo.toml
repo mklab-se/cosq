@@ -18,6 +18,7 @@ path = "src/main.rs"
 [dependencies]
 cosq-core.workspace = true
 cosq-client.workspace = true
+ailloy.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
 serde.workspace = true

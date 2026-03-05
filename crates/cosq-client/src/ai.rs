@@ -1,55 +1,47 @@
-//! Unified AI text generation dispatcher
+//! Unified AI text generation via ailloy
 //!
-//! Routes AI requests to the configured provider: Azure OpenAI API,
-//! local CLI agents (claude, codex, copilot), or Ollama.
+//! Uses the globally configured ailloy provider for AI requests.
 
-use cosq_core::config::{AiConfig, AiProvider};
+use ailloy::{ChatOptions, Client, Message};
 
-use crate::error::ClientError;
-use crate::local_agent;
-use crate::ollama::OllamaClient;
-use crate::openai::AzureOpenAIClient;
-
-/// Generate text using the configured AI provider.
+/// Generate text using the globally configured ailloy provider.
 ///
-/// Dispatches to the appropriate backend based on `config.provider`:
-/// - `AzureOpenai`: REST API call with AAD token auth
-/// - `Claude`/`Codex`/`Copilot`: Local CLI subprocess
-/// - `Ollama`: Local HTTP API
-pub async fn generate_text(
-    config: &AiConfig,
+/// Uses the default chat node from `~/.config/ailloy/config.yaml`.
+/// Run `ailloy config` to set up a provider.
+pub async fn generate_text(system_prompt: &str, user_prompt: &str) -> anyhow::Result<String> {
+    generate_text_with_limit(system_prompt, user_prompt, 2000).await
+}
+
+/// Generate text with a custom max_tokens limit.
+pub async fn generate_text_with_limit(
     system_prompt: &str,
     user_prompt: &str,
-) -> Result<String, ClientError> {
-    match config.provider {
-        AiProvider::AzureOpenai => {
-            let client = AzureOpenAIClient::from_config(config).await?;
-            client
-                .chat_completion(system_prompt, user_prompt, 0.3, 2000)
-                .await
-        }
+    max_tokens: u32,
+) -> anyhow::Result<String> {
+    let client = Client::from_config()?;
+    let opts = ChatOptions::builder()
+        .temperature(0.3)
+        .max_tokens(max_tokens)
+        .build();
+    let response = client
+        .chat_with(
+            &[Message::system(system_prompt), Message::user(user_prompt)],
+            &opts,
+        )
+        .await?;
+    Ok(response.content)
+}
 
-        AiProvider::Claude | AiProvider::Codex | AiProvider::Copilot => {
-            let model = config.effective_model();
-            local_agent::generate_text(
-                &config.provider,
-                model.as_deref(),
-                system_prompt,
-                user_prompt,
-            )
-            .await
-        }
+/// Check if ailloy is configured with a default chat node.
+pub fn is_configured() -> bool {
+    ailloy::config::Config::load()
+        .map(|c| c.default_chat_node().is_ok())
+        .unwrap_or(false)
+}
 
-        AiProvider::Ollama => {
-            let model = config.effective_model().ok_or_else(|| {
-                ClientError::local_agent(
-                    "Ollama requires a model to be configured. Run `cosq ai init` to select one.",
-                )
-            })?;
-            let client = OllamaClient::new(Some(&config.ollama_base_url()));
-            client
-                .chat_completion(&model, system_prompt, user_prompt)
-                .await
-        }
-    }
+/// Get a display name for the currently configured provider.
+pub fn provider_display_name() -> Option<String> {
+    let config = ailloy::config::Config::load().ok()?;
+    let (id, _node) = config.default_chat_node().ok()?;
+    Some(id.to_string())
 }

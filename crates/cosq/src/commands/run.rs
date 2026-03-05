@@ -209,10 +209,7 @@ async fn render_with_ai_recovery(
             eprintln!("\n{} {}", "Template error:".red().bold(), error_msg);
 
             // Check if AI is configured
-            let config = Config::load().ok();
-            let ai_config = config.as_ref().and_then(|c| c.ai.clone());
-
-            if let Some(ai) = ai_config {
+            if crate::commands::ai::is_ai_active() {
                 let fix = Confirm::new("Would you like AI to fix this?")
                     .with_default(true)
                     .prompt()
@@ -220,7 +217,6 @@ async fn render_with_ai_recovery(
 
                 if fix {
                     return fix_template_with_ai(
-                        &ai,
                         template_str,
                         &error_msg,
                         documents,
@@ -238,7 +234,6 @@ async fn render_with_ai_recovery(
 
 /// Use AI to fix a broken template and re-render
 async fn fix_template_with_ai(
-    ai_config: &cosq_core::config::AiConfig,
     broken_template: &str,
     error_msg: &str,
     documents: &[Value],
@@ -247,7 +242,13 @@ async fn fix_template_with_ai(
 ) -> Result<String> {
     eprintln!(
         "{}",
-        format!("Fixing via {}...", ai_config.provider.display_name()).dimmed()
+        format!(
+            "Fixing via {}...",
+            cosq_client::ai::provider_display_name()
+                .as_deref()
+                .unwrap_or("AI")
+        )
+        .dimmed()
     );
 
     let sample = if documents.is_empty() {
@@ -268,7 +269,7 @@ async fn fix_template_with_ai(
         "This template has an error:\n\n{broken_template}\n\nError: {error_msg}\n\nFix the template."
     );
 
-    let response = cosq_client::ai::generate_text(ai_config, &system_prompt, &user_prompt)
+    let response = cosq_client::ai::generate_text(&system_prompt, &user_prompt)
         .await
         .context("AI fix failed")?;
 

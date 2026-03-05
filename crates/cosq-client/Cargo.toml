@@ -10,6 +10,8 @@ description = "Azure Cosmos DB client and authentication for cosq"
 
 [dependencies]
 cosq-core.workspace = true
+ailloy.workspace = true
+anyhow.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

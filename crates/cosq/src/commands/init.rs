@@ -137,7 +137,6 @@ pub async fn run(args: InitArgs) -> Result<()> {
         },
         database: None,
         container: None,
-        ai: None,
     };
 
     let config_path = config.save()?;

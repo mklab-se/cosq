@@ -235,10 +235,6 @@ async fn generate(
 ) -> Result<()> {
     let mut config = Config::load()?;
 
-    let ai_config = config.ai.clone().ok_or_else(|| {
-        anyhow::anyhow!("AI is not configured. Run `cosq ai init` to set up an AI provider.")
-    })?;
-
     // --- Step 1: Resolve database ---
     let client = cosq_client::cosmos::CosmosClient::new(&config.account.endpoint).await?;
 
@@ -293,7 +289,13 @@ async fn generate(
     if !quiet {
         eprintln!(
             "{}",
-            format!("Generating via {}...", ai_config.provider.display_name()).dimmed()
+            format!(
+                "Generating via {}...",
+                cosq_client::ai::provider_display_name()
+                    .as_deref()
+                    .unwrap_or("AI")
+            )
+            .dimmed()
         );
     }
 
@@ -302,10 +304,9 @@ async fn generate(
     let max_rounds = 3;
 
     for round in 0..max_rounds {
-        let response =
-            cosq_client::ai::generate_text(&ai_config, &system_prompt, &conversation_prompt)
-                .await
-                .context("failed to generate query")?;
+        let response = cosq_client::ai::generate_text(&system_prompt, &conversation_prompt)
+            .await
+            .context("failed to generate query")?;
 
         let content = strip_markdown_fences(&response);
 
@@ -360,7 +361,13 @@ async fn generate(
                 if !quiet {
                     eprintln!(
                         "{}",
-                        format!("Generating via {}...", ai_config.provider.display_name()).dimmed()
+                        format!(
+                            "Generating via {}...",
+                            cosq_client::ai::provider_display_name()
+                                .as_deref()
+                                .unwrap_or("AI")
+                        )
+                        .dimmed()
                     );
                 }
             }
@@ -386,10 +393,8 @@ async fn generate(
     }
 
     // Add AI provenance
-    let provider_info = match ai_config.effective_model() {
-        Some(model) => format!("{} ({})", ai_config.provider.display_name(), model),
-        None => ai_config.provider.display_name().to_string(),
-    };
+    let provider_info =
+        cosq_client::ai::provider_display_name().unwrap_or_else(|| "ailloy".to_string());
     query.metadata.generated_by = Some(provider_info);
     query.metadata.generated_from = Some(description.clone());
 
