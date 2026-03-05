@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-03-06
+
+### Changed
+
+- **Replaced built-in AI providers with ailloy** — AI configuration now uses the `ailloy` unified AI library (`~/.config/ailloy/config.yaml`) instead of cosq's own per-provider setup. Removes ~840 lines of provider-specific code (`openai.rs`, `local_agent.rs`, `ollama.rs`) and the `AiProvider`/`AiConfig` types
+- **Redesigned `cosq ai` subcommands** — replaced `cosq ai init` and `cosq ai status` with a cleaner set: `cosq ai` (status), `cosq ai test` (test connection), `cosq ai enable`/`disable` (toggle AI features), `cosq ai config` (open config in editor)
+- **AI config no longer stored in cosq config** — the `ai:` section in `~/.config/cosq/config.yaml` is no longer used. Run `cosq ai config` to set up ailloy instead
+
 ## [0.6.1] - 2026-02-26
 
 ### Fixed

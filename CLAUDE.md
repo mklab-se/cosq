@@ -30,7 +30,7 @@ crates/
         auth.rs     # `cosq auth` (status/login/logout)
         completion.rs # `cosq completion` (static + dynamic completion tip)
         init.rs     # `cosq init` (interactive Cosmos DB account setup)
-        ai.rs       # `cosq ai init` (interactive AI provider setup)
+        ai.rs       # `cosq ai` (AI feature management: status, test, enable/disable, config)
         common.rs   # Shared DB/container resolution (CLI flag > metadata > config > picker)
         query.rs    # `cosq query` (SQL query execution with output formatting)
         run.rs      # `cosq run` (execute stored queries with parameters)
@@ -39,7 +39,7 @@ crates/
   cosq-core/        # Core types and configuration
     src/
       lib.rs        # Module exports
-      config.rs     # Config format (load/save from ~/.config/cosq/), AiProvider enum, AiConfig
+      config.rs     # Config format (load/save from ~/.config/cosq/)
       stored_query.rs # Stored query format (.cosq files), parameter resolution, query discovery
   cosq-client/      # Azure Cosmos DB client and authentication
     src/
@@ -47,10 +47,7 @@ crates/
       auth.rs       # Azure CLI auth (token acquisition, login status)
       arm.rs        # ARM discovery (subscriptions, Cosmos DB accounts, RBAC role management)
       cosmos.rs     # Cosmos DB data plane client (query, parameterized query, list databases/containers)
-      ai.rs         # Unified AI dispatcher (routes to Azure OpenAI, local agents, or Ollama)
-      openai.rs     # Azure OpenAI client (chat completions with AAD token auth)
-      local_agent.rs # Local CLI agent integration (claude, codex, copilot subprocess invocation)
-      ollama.rs     # Ollama HTTP API client (local LLM chat completions, model listing)
+      ai.rs         # Unified AI dispatcher via ailloy library
       error.rs      # ClientError types with helpful hints
 ```
 
@@ -71,8 +68,8 @@ crates/
 - Cosmos DB data plane: REST API with AAD token auth, parameterized queries, pagination via `x-ms-continuation`
 - Stored queries: `.cosq` files with YAML front matter + SQL body, stored in `~/.cosq/queries/` (user) and `.cosq/queries/` (project, overrides user). Supports multi-step queries with `steps:` metadata and `-- step: <name>` SQL markers, cross-step references via `@step.field`
 - Output formatting: JSON (default), JSON-compact, table (comfy-table), CSV, MiniJinja templates
-- AI query generation: schema-aware, multi-provider via unified dispatcher — samples real documents for field context, generates SQL + templates, supports multi-turn conversation. Providers: Azure OpenAI API, local CLI agents (claude, codex, copilot), Ollama local LLMs. Configured via `cosq ai init`
-- Config: `~/.config/cosq/config.yaml` (via `dirs::config_dir()`), includes optional `database`/`container`/`ai` sections
+- AI query generation: schema-aware via ailloy unified AI library — samples real documents for field context, generates SQL + templates, supports multi-turn conversation. Configured via `cosq ai config` (uses `~/.config/ailloy/config.yaml`)
+- Config: `~/.config/cosq/config.yaml` (via `dirs::config_dir()`), includes optional `database`/`container` sections
 - Update checker: background task, cached at `~/.cache/cosq/`, skip with `COSQ_NO_UPDATE_CHECK=1`
 
 ## Releasing
