@@ -209,7 +209,7 @@ pub enum AiCommands {
     Enable,
     /// Disable AI features for cosq
     Disable,
-    /// Open AI configuration file in your editor
+    /// Interactively configure AI provider and model settings
     Config,
 }
 
