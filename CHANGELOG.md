@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-03-20
+
+### Added
+
+- **`cosq ai skill` command** — helps AI coding agents (like Claude Code) set up skills for working with cosq. Use `--emit` to output a ready-to-save skill file, or `--reference` for comprehensive reference documentation
+- **`cosq ai status` subcommand** — explicit subcommand for showing AI status (same as running `cosq ai` with no subcommand)
+
 ## [0.8.0] - 2026-03-18
 
 ### Changed
