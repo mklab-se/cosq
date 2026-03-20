@@ -24,6 +24,11 @@ pub async fn run(cmd: Option<AiCommands>) -> Result<()> {
             config_tui::run_interactive_config(&mut config, &["chat"]).await?;
             Ok(())
         }
+        Some(AiCommands::Status) => config_tui::print_ai_status("cosq", &["chat"]),
+        Some(AiCommands::Skill { emit, reference }) => {
+            crate::commands::skill::run(emit, reference);
+            Ok(())
+        }
     }
 }
 

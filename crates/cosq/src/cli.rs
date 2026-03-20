@@ -211,6 +211,18 @@ pub enum AiCommands {
     Disable,
     /// Interactively configure AI provider and model settings
     Config,
+    /// Show AI status (same as running `cosq ai` without a subcommand)
+    Status,
+    /// AI agent skill information — helps set up Claude Code skills for cosq
+    Skill {
+        /// Output the skill markdown content (ready to save as a skill file)
+        #[arg(long)]
+        emit: bool,
+
+        /// Output detailed reference documentation for AI agents
+        #[arg(long)]
+        reference: bool,
+    },
 }
 
 #[derive(clap::Subcommand)]
