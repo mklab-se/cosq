@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2026-07-07
+
+### Changed
+
+- Upgraded to ailloy 1.0: Azure OpenAI / Microsoft Foundry requests now use
+  the unified `/openai/v1/` surface, models that reject sampling parameters
+  are retried automatically, and current default models (gpt-5.4-mini,
+  claude-sonnet-5) replace retiring ones.
+
 ## [0.9.0] - 2026-03-20
 
 ### Added

@@ -13,9 +13,9 @@ dependencies = [
 
 [[package]]
 name = "ailloy"
-version = "0.5.2"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8e8732de48e630ad50ca8b8357ccd1a7b28ba73adccaac619d5c0df35913d2b"
+checksum = "64c1c3c9ea384c70be74485d7f82780569f923eb0b876f38aa9c97d3a595a932"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -290,7 +290,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "cosq"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "ailloy",
  "anyhow",
@@ -316,7 +316,7 @@ dependencies = [
 
 [[package]]
 name = "cosq-client"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "ailloy",
  "anyhow",
@@ -334,7 +334,7 @@ dependencies = [
 
 [[package]]
 name = "cosq-core"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "dirs 6.0.0",
  "regex",
