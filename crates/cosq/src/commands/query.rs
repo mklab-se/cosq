@@ -25,14 +25,19 @@ pub struct QueryArgs {
 
 pub async fn run(args: QueryArgs) -> Result<()> {
     let mut config = Config::load()?;
-    let client = CosmosClient::new(&config.account.endpoint).await?;
+    let (_profile_name, profile) = config.active_mut(None)?;
+    let mut profile = profile.clone();
+    let client = CosmosClient::new(&profile.account.endpoint).await?;
 
     let (database, db_changed) =
-        common::resolve_database(&client, &mut config, args.db, None).await?;
+        common::resolve_database(&client, &mut profile, args.db, None).await?;
     let (container, ctr_changed) =
-        common::resolve_container(&client, &mut config, &database, args.container, None).await?;
+        common::resolve_container(&client, &mut profile, &database, args.container, None).await?;
 
     if db_changed || ctr_changed {
+        let (name, slot) = config.active_mut(None)?;
+        let _ = name;
+        *slot = profile.clone();
         config.save()?;
     }
 

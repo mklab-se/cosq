@@ -40,6 +40,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_color: bool,
 
+    /// Account profile to use (also honors COSQ_PROFILE)
+    #[arg(long, global = true)]
+    pub profile: Option<String>,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -122,6 +126,10 @@ pub enum Commands {
         /// Azure subscription ID (skip interactive selection)
         #[arg(long)]
         subscription: Option<String>,
+
+        /// Profile name to save this account under
+        #[arg(long)]
+        name: Option<String>,
 
         /// Auto-confirm prompts (e.g. RBAC role assignment)
         #[arg(long, short)]
@@ -257,6 +265,10 @@ pub enum Shell {
 
 impl Cli {
     pub async fn run(self) -> Result<()> {
+        if let Some(profile) = &self.profile {
+            // Single resolution path: commands read COSQ_PROFILE via Config::active.
+            unsafe { std::env::set_var("COSQ_PROFILE", profile) };
+        }
         match self.command {
             Some(Commands::Query {
                 sql,
@@ -306,11 +318,13 @@ impl Cli {
             Some(Commands::Init {
                 account,
                 subscription,
+                name,
                 yes,
             }) => {
                 crate::commands::init::run(crate::commands::init::InitArgs {
                     account,
                     subscription,
+                    name,
                     yes,
                 })
                 .await

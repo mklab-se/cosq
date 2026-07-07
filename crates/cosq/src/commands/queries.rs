@@ -234,14 +234,19 @@ async fn generate(
     quiet: bool,
 ) -> Result<()> {
     let mut config = Config::load()?;
+    let (_profile_name, profile) = config.active_mut(None)?;
+    let mut profile = profile.clone();
 
     // --- Step 1: Resolve database ---
-    let client = cosq_client::cosmos::CosmosClient::new(&config.account.endpoint).await?;
+    let client = cosq_client::cosmos::CosmosClient::new(&profile.account.endpoint).await?;
 
     let (database, db_changed) =
-        super::common::resolve_database(&client, &mut config, cli_db, None).await?;
+        super::common::resolve_database(&client, &mut profile, cli_db, None).await?;
 
     if db_changed {
+        let (name, slot) = config.active_mut(None)?;
+        let _ = name;
+        *slot = profile.clone();
         config.save()?;
     }
 

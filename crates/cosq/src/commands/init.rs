@@ -14,6 +14,7 @@ use inquire::{Confirm, Select};
 pub struct InitArgs {
     pub account: Option<String>,
     pub subscription: Option<String>,
+    pub name: Option<String>,
     pub yes: bool,
 }
 
@@ -127,17 +128,26 @@ pub async fn run(args: InitArgs) -> Result<()> {
     // Step 4: Ensure data plane access
     ensure_data_plane_access(&arm, &account, args.yes).await?;
 
-    // Step 5: Save config
-    let config = Config {
-        account: AccountConfig {
-            name: account.name.clone(),
-            subscription: subscription_id,
-            resource_group: account.resource_group.clone(),
-            endpoint: account.endpoint.clone(),
+    // Step 5: Save as a named profile (merging with any existing config)
+    let mut config = Config::load().unwrap_or_default();
+    let profile_name = args.name.clone().unwrap_or_else(|| "default".to_string());
+    config.profiles.insert(
+        profile_name.clone(),
+        cosq_core::config::Profile {
+            account: AccountConfig {
+                name: account.name.clone(),
+                subscription: subscription_id,
+                resource_group: account.resource_group.clone(),
+                endpoint: account.endpoint.clone(),
+            },
+            database: None,
+            container: None,
+            embed_models: Default::default(),
         },
-        database: None,
-        container: None,
-    };
+    );
+    if config.default_profile.is_none() {
+        config.default_profile = Some(profile_name.clone());
+    }
 
     let config_path = config.save()?;
 
