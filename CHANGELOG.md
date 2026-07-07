@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] — 1.0.0 in progress
+
+### Phase 1 — Foundation
+
+- **Parallel cross-partition fan-out** (bounded at 8 concurrent ranges) with
+  per-range RU breakdown at `-v`; queries preserve range order.
+- **Partition scoping**: queries whose WHERE clause pins the partition key run
+  against a single partition (no fan-out); `--pk` forces it. New `--first`
+  and `--max-items` flags.
+- **Cached AAD tokens** (`~/.cache/cosq/tokens.json`, 0600) — one `az` call
+  per expiry window instead of per command. `COSQ_CACHE_DIR` override.
+- **Multi-account profiles** (breaking): config is now named profiles with
+  `default_profile`; select with `--profile` / `COSQ_PROFILE`. Old configs get
+  a clear "run `cosq init`" error. `cosq init --name <profile>` adds more.
+  `COSQ_CONFIG_DIR` override for isolated setups.
+- **`cosq databases` / `cosq containers`** listing commands (containers show
+  partition key + vector/full-text policy indicators).
+- Wire version `2020-07-15` with recorded live spike findings: vector/FTS/RANK
+  queries execute per partition-key-range (cosq's fan-out) and pk-scoped;
+  VectorDistance projects a mergeable score.
+- Deps: serde_yaml → serde_yaml_ng, colored 3; dead error variants removed;
+  stale docs fixed.
+
 ## [0.9.1] - 2026-07-07
 
 ### Changed

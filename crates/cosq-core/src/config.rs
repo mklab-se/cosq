@@ -131,7 +131,11 @@ impl Config {
 
 impl Config {
     /// Return the path to the config file: `<config_dir>/cosq/config.yaml`.
+    /// `COSQ_CONFIG_DIR` overrides the directory (tests, isolated setups).
     pub fn path() -> Result<PathBuf, ConfigError> {
+        if let Ok(dir) = std::env::var("COSQ_CONFIG_DIR") {
+            return Ok(PathBuf::from(dir).join(FILENAME));
+        }
         dirs::config_dir()
             .map(|d| d.join(APP_DIR).join(FILENAME))
             .ok_or(ConfigError::NoConfigDir)

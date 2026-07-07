@@ -233,9 +233,12 @@ impl TokenSource for AzTokenSource {
         }
 
         #[derive(Deserialize)]
-        #[serde(rename_all = "camelCase")]
         struct AzToken {
+            #[serde(rename = "accessToken")]
             access_token: String,
+            /// az emits BOTH `expiresOn` (local datetime string) and
+            /// `expires_on` (unix epoch seconds) — we want the epoch.
+            #[serde(rename = "expires_on")]
             expires_on: Option<i64>,
         }
         let parsed: AzToken = serde_json::from_slice(&output.stdout)
