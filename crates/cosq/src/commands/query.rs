@@ -74,6 +74,11 @@ pub async fn run(args: QueryArgs) -> Result<()> {
             "Request charge:".dimmed(),
             result.request_charge
         );
+        if tracing::enabled!(tracing::Level::DEBUG) && result.per_range.len() > 1 {
+            for (range, charge) in &result.per_range {
+                eprintln!("{}", format!("  range {range}: {charge:.2} RUs").dimmed());
+            }
+        }
     }
 
     Ok(())

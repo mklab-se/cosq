@@ -4,6 +4,7 @@
 //! with AAD token authentication. Handles cross-partition queries by
 //! fetching partition key ranges and fanning out the query.
 
+use futures_util::{StreamExt, TryStreamExt};
 use serde::Deserialize;
 use serde_json::Value;
 use tracing::debug;
@@ -13,11 +14,18 @@ use crate::error::ClientError;
 
 const API_VERSION: &str = "2018-12-31";
 
+/// Maximum concurrent partition-key-range queries during cross-partition
+/// fan-out. Bounded to stay polite to the gateway.
+const MAX_PARALLEL_RANGES: usize = 8;
+
 /// Result of a Cosmos DB SQL query
 #[derive(Debug)]
 pub struct QueryResult {
     pub documents: Vec<Value>,
     pub request_charge: f64,
+    /// Per partition-key-range RU charges (range id, RU). Single-partition
+    /// and scoped queries have one entry.
+    pub per_range: Vec<(String, f64)>,
 }
 
 /// Cosmos DB REST API response for queries
@@ -75,12 +83,16 @@ impl CosmosClient {
     /// Create a new Cosmos client, acquiring a Cosmos DB token via the Azure CLI.
     pub async fn new(endpoint: &str) -> Result<Self, ClientError> {
         let token = AzCliAuth::get_token(COSMOS_RESOURCE).await?;
-        let endpoint = endpoint.trim_end_matches('/').to_string();
-        Ok(Self {
+        Ok(Self::with_token(endpoint, token))
+    }
+
+    /// Create a client with a pre-acquired token (tests, alternate auth).
+    pub fn with_token(endpoint: &str, token: String) -> Self {
+        Self {
             http: reqwest::Client::new(),
-            endpoint,
+            endpoint: endpoint.trim_end_matches('/').to_string(),
             token,
-        })
+        }
     }
 
     /// Build the Authorization header value for AAD token auth.
@@ -305,23 +317,38 @@ impl CosmosClient {
             "parameters": parameters
         });
 
-        // Get partition key ranges and fan out the query
+        // Get partition key ranges and fan out the query — in parallel,
+        // bounded, preserving range order in the collected output.
         let ranges = self.get_partition_key_ranges(database, container).await?;
         debug!(count = ranges.len(), "querying across partition key ranges");
 
+        let results: Vec<(String, Vec<Value>, f64)> =
+            futures_util::stream::iter(ranges.into_iter().map(|range_id| {
+                let client = self.clone();
+                let url = url.clone();
+                let body = body.clone();
+                async move {
+                    let (docs, charge) = client.query_partition(&url, &body, &range_id).await?;
+                    debug!(
+                        range_id,
+                        docs = docs.len(),
+                        charge,
+                        "partition query complete"
+                    );
+                    Ok::<_, ClientError>((range_id, docs, charge))
+                }
+            }))
+            .buffered(MAX_PARALLEL_RANGES)
+            .try_collect()
+            .await?;
+
         let mut all_documents = Vec::new();
         let mut total_charge = 0.0_f64;
-
-        for range_id in &ranges {
-            let (docs, charge) = self.query_partition(&url, &body, range_id).await?;
-            debug!(
-                range_id,
-                docs = docs.len(),
-                charge,
-                "partition query complete"
-            );
+        let mut per_range = Vec::new();
+        for (range_id, docs, charge) in results {
             all_documents.extend(docs);
             total_charge += charge;
+            per_range.push((range_id, charge));
         }
 
         debug!(
@@ -333,6 +360,7 @@ impl CosmosClient {
         Ok(QueryResult {
             documents: all_documents,
             request_charge: total_charge,
+            per_range,
         })
     }
 }

@@ -9,6 +9,7 @@ rust-version.workspace = true
 description = "Azure Cosmos DB client and authentication for cosq"
 
 [dependencies]
+futures-util = "0.3"
 cosq-core.workspace = true
 ailloy.workspace = true
 anyhow.workspace = true
@@ -21,3 +22,7 @@ tracing.workspace = true
 chrono.workspace = true
 urlencoding.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+wiremock = "0.6"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
