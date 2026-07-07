@@ -22,12 +22,6 @@ pub enum ClientError {
     #[error("Azure CLI error: {message}\n\nHint: {hint}")]
     AzCli { message: String, hint: String },
 
-    #[error("Azure OpenAI error: {message}")]
-    OpenAI { message: String },
-
-    #[error("local AI agent error: {message}")]
-    LocalAgent { message: String },
-
     #[error("{0}")]
     Other(String),
 }
@@ -55,18 +49,6 @@ impl ClientError {
 
     pub fn not_found(msg: impl Into<String>) -> Self {
         Self::NotFound {
-            message: msg.into(),
-        }
-    }
-
-    pub fn openai(msg: impl Into<String>) -> Self {
-        Self::OpenAI {
-            message: msg.into(),
-        }
-    }
-
-    pub fn local_agent(msg: impl Into<String>) -> Self {
-        Self::LocalAgent {
             message: msg.into(),
         }
     }
@@ -163,11 +145,9 @@ mod tests {
     #[test]
     fn test_format_request_error_cert_message() {
         // Verify the TLS diagnostic message contains key guidance
-        let msg = format!(
-            "TLS certificate verification failed\n\n\
+        let msg = "TLS certificate verification failed\n\n\
              The remote server's certificate was not trusted. This typically happens on\n\
-             corporate networks that use TLS inspection with a custom CA certificate."
-        );
+             corporate networks that use TLS inspection with a custom CA certificate.";
         assert!(msg.contains("TLS certificate verification failed"));
         assert!(msg.contains("corporate networks"));
     }

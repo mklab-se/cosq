@@ -247,7 +247,7 @@ mod tests {
     fn test_format_cell_types() {
         assert_eq!(format_cell(Some(&json!("hello"))), "hello");
         assert_eq!(format_cell(Some(&json!(42))), "42");
-        assert_eq!(format_cell(Some(&json!(3.14))), "3.14");
+        assert_eq!(format_cell(Some(&json!(2.72))), "2.72");
         assert_eq!(format_cell(Some(&json!(true))), "true");
         assert_eq!(format_cell(Some(&Value::Null)), "");
         assert_eq!(format_cell(None), "");

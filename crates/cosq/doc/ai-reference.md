@@ -228,7 +228,7 @@ variable.
 
 ```jinja
 {% for doc in documents %}
-{{ doc.id | pad(start=10) }}: {{ doc.name | truncate(length=30) }}
+{{ doc.id | pad(10) }}: {{ doc.name | truncate(30) }}
 {% endfor %}
 ```
 

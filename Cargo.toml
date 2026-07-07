@@ -26,7 +26,7 @@ clap_complete = { version = "4.5", features = ["unstable-dynamic"] }
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
-serde_yaml = "0.9"
+serde_yaml = { package = "serde_yaml_ng", version = "0.10" }
 
 # Async
 tokio = { version = "1.40", features = ["full"] }
@@ -39,7 +39,7 @@ anyhow = "1.0"
 thiserror = "2.0"
 
 # Terminal
-colored = "2.1"
+colored = "3"
 inquire = "0.7"
 
 # Logging

@@ -98,7 +98,7 @@ Generate stored queries from natural language — the AI samples your actual doc
 
 ```bash
 # Set up AI (auto-detects Claude, Codex, Copilot, Ollama, or Azure OpenAI)
-cosq ai init
+cosq ai config
 
 # Fully interactive: pick database, container, describe your query
 cosq queries generate
