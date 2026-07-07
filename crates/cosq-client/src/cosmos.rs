@@ -12,7 +12,22 @@ use tracing::debug;
 use crate::auth::{AzCliAuth, COSMOS_RESOURCE};
 use crate::error::ClientError;
 
-const API_VERSION: &str = "2018-12-31";
+/// Data-plane wire version.
+///
+/// Spike findings (2026-07-07, live against a serverless account with
+/// EnableNoSQLVectorSearch + EnableNoSQLFullTextSearch):
+/// - `2018-12-31` and `2020-07-15` behave identically for everything cosq
+///   does; we use the newer one.
+/// - VectorDistance / ORDER BY RANK / RRF queries are REJECTED by the
+///   gateway's naive cross-partition mode ("can not be directly served by
+///   the gateway") but EXECUTE FINE per partition-key-range — which is how
+///   cosq's fan-out already works — and when pk-scoped.
+/// - VectorDistance can be projected (client-side exact merge possible);
+///   FullTextScore cannot (SC2240) — cross-partition FTS merges are
+///   approximate, pk-scoped/single-partition are exact.
+/// - A container with BOTH vector and full-text policies failed to provision
+///   on the serverless test account; vector-only and fts-only succeeded.
+const API_VERSION: &str = "2020-07-15";
 
 /// Maximum concurrent partition-key-range queries during cross-partition
 /// fan-out. Bounded to stay polite to the gateway.
