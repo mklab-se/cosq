@@ -84,6 +84,23 @@ pub enum Commands {
         max_items: Option<u32>,
     },
 
+    /// List databases in the active account
+    Databases {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// List containers in a database (shows partition key + search policies)
+    Containers {
+        /// Database name (default: profile default or picker)
+        #[arg(long)]
+        db: Option<String>,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Execute a stored query by name (interactive picker if no name given)
     Run {
         /// Name of the stored query (with or without .cosq extension)
@@ -292,6 +309,10 @@ impl Cli {
                     quiet: self.quiet,
                 })
                 .await
+            }
+            Some(Commands::Databases { json }) => crate::commands::list::databases(json).await,
+            Some(Commands::Containers { db, json }) => {
+                crate::commands::list::containers(db, json).await
             }
             Some(Commands::Run {
                 name,
