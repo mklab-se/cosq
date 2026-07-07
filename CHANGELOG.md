@@ -2,7 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] — 1.0.0 in progress
+## [1.0.0] - 2026-07-07
+
+From "run SQL from the terminal" to "talk to your data" — while staying a
+lean, pipeable, **read-only** CLI. No backward compatibility with 0.x configs
+(re-run `cosq init`).
+
+### Added — AI layer
+
+- **`cosq ask`**: natural-language question → Cosmos SQL (via ailloy
+  structured output, grounded in the schema card) → executed answer, with
+  `--save`, `--sql-only`, `--yes`, confidence-gated confirmation, and
+  automatic partition scoping of generated SQL.
+- **Schema cards**: cached per-container YAML knowledge (field paths/types/
+  examples/value sets, AI descriptions, inferred cross-container
+  relationships, partition key, vector/full-text policies) at
+  `~/.cosq/schema/<profile>/…`, 7-day TTL, project-local `.cosq/schema/`
+  override. `cosq schema [container] [--refresh] [--json]`.
+- **`cosq search`**: semantic / full-text / hybrid search using Cosmos DB's
+  native engine — query text embedded via ailloy (embed node matched by
+  vector dimensions, remembered per container), `VectorDistance` with exact
+  cross-partition score merge, BM25 `FullTextScore`, `RRF` hybrid, keyword
+  CONTAINS fallback. No local vector store.
+- **`cosq explain`** (query doctor): RU + per-range query metrics, decoded
+  index utilization with recommended single/composite indexes, and an AI
+  diagnosis with the concrete indexingPolicy fix.
+- **`cosq shell`**: reedline REPL with context prompt
+  (`cosq (profile) db/container »`), direct SQL (multi-line), `? question`
+  ask-mode with composing follow-ups (conversation memory), `:` meta-commands,
+  tab completion (metas, databases, containers, stored queries), persistent
+  history, and scriptable non-TTY mode.
+- `queries generate` now builds on schema cards (no per-run resampling).
+- Refreshed `cosq ai skill` (agent skill + rewritten ai-reference).
 
 ### Phase 1 — Foundation
 
