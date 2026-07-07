@@ -17,6 +17,9 @@ pub struct QueryArgs {
     pub container: Option<String>,
     pub output: Option<OutputFormat>,
     pub template: Option<String>,
+    pub pk: Option<String>,
+    pub first: Option<usize>,
+    pub max_items: Option<u32>,
     pub quiet: bool,
 }
 
@@ -33,8 +36,38 @@ pub async fn run(args: QueryArgs) -> Result<()> {
         config.save()?;
     }
 
-    // Execute query
-    let result = client.query(&database, &container, &args.sql).await?;
+    // Execute query — scoped to one partition when possible.
+    let opts = cosq_client::cosmos::QueryOptions {
+        max_item_count: args.max_items,
+        first: args.first,
+    };
+    let pk_value: Option<serde_json::Value> = match &args.pk {
+        Some(explicit) => Some(serde_json::Value::String(explicit.clone())),
+        None => {
+            // auto-detect from the WHERE clause using container metadata
+            match client.get_container(&database, &container).await {
+                Ok(meta) => meta.pk_paths.first().and_then(|pk_path| {
+                    cosq_core::pk_detect::detect_pk_equality(&args.sql, pk_path, &[])
+                }),
+                Err(_) => None, // metadata unavailable — plain fan-out
+            }
+        }
+    };
+    let result = match &pk_value {
+        Some(pk) => {
+            if !args.quiet {
+                eprintln!("{}", format!("Scoped to partition {pk}").dimmed());
+            }
+            client
+                .query_scoped(&database, &container, &args.sql, Vec::new(), pk, &opts)
+                .await?
+        }
+        None => {
+            client
+                .query_with_params(&database, &container, &args.sql, Vec::new(), &opts)
+                .await?
+        }
+    };
 
     // Determine output format
     let has_template = args.template.is_some();

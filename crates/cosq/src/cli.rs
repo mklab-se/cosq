@@ -66,6 +66,18 @@ pub enum Commands {
         /// Path to a MiniJinja template file for output formatting
         #[arg(long)]
         template: Option<String>,
+
+        /// Scope the query to a single partition key value (skips fan-out)
+        #[arg(long)]
+        pk: Option<String>,
+
+        /// Stop after N documents
+        #[arg(long)]
+        first: Option<usize>,
+
+        /// Page size per request (x-ms-max-item-count)
+        #[arg(long)]
+        max_items: Option<u32>,
     },
 
     /// Execute a stored query by name (interactive picker if no name given)
@@ -252,6 +264,9 @@ impl Cli {
                 container,
                 output,
                 template,
+                pk,
+                first,
+                max_items,
             }) => {
                 crate::commands::query::run(crate::commands::query::QueryArgs {
                     sql,
@@ -259,6 +274,9 @@ impl Cli {
                     container,
                     output,
                     template,
+                    pk,
+                    first,
+                    max_items,
                     quiet: self.quiet,
                 })
                 .await

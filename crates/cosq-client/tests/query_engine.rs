@@ -101,3 +101,61 @@ async fn per_range_continuation_tokens_are_followed() {
     assert_eq!(ids, vec!["1", "2"]);
     assert!((result.request_charge - 2.0).abs() < 1e-9);
 }
+
+#[tokio::test]
+async fn scoped_query_sends_pk_header_and_skips_pkranges() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/dbs/db/colls/c/docs"))
+        .and(header("x-ms-documentdb-partitionkey", "[\"cust-1\"]"))
+        .respond_with(docs_response(&[7], 2.0))
+        .mount(&server)
+        .await;
+
+    let client = CosmosClient::with_token(&server.uri(), "t".into());
+    let result = client
+        .query_scoped(
+            "db",
+            "c",
+            "SELECT * FROM c WHERE c.pk = 'cust-1'",
+            vec![],
+            &json!("cust-1"),
+            &cosq_client::cosmos::QueryOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.documents.len(), 1);
+    assert_eq!(result.per_range, vec![("scoped".to_string(), 2.0)]);
+
+    let requests = server.received_requests().await.unwrap();
+    assert!(
+        !requests.iter().any(|r| r.url.path().ends_with("/pkranges")),
+        "scoped query must not fetch pkranges"
+    );
+}
+
+#[tokio::test]
+async fn container_meta_parses_policies() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/dbs/db/colls/c"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "c",
+            "partitionKey": {"paths": ["/customerId"], "kind": "Hash"},
+            "vectorEmbeddingPolicy": {"vectorEmbeddings": [
+                {"path": "/embedding", "dataType": "float32", "dimensions": 3072, "distanceFunction": "cosine"}
+            ]},
+            "fullTextPolicy": {"defaultLanguage": "en-US", "fullTextPaths": [{"path": "/text", "language": "en-US"}]}
+        })))
+        .mount(&server)
+        .await;
+
+    let client = CosmosClient::with_token(&server.uri(), "t".into());
+    let meta = client.get_container("db", "c").await.unwrap();
+    assert_eq!(meta.pk_paths, vec!["/customerId"]);
+    assert_eq!(
+        meta.vector_paths,
+        vec![("/embedding".to_string(), 3072, "cosine".to_string())]
+    );
+    assert_eq!(meta.full_text_paths, vec!["/text"]);
+}

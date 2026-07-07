@@ -148,7 +148,13 @@ pub async fn run(args: RunArgs) -> Result<()> {
 
         let cosmos_params = StoredQuery::build_cosmos_params(&resolved);
         let result = client
-            .query_with_params(&database, &container, &query.sql, cosmos_params)
+            .query_with_params(
+                &database,
+                &container,
+                &query.sql,
+                cosmos_params,
+                &cosq_client::cosmos::QueryOptions::default(),
+            )
             .await?;
 
         let has_template = args.template.is_some()
