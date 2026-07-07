@@ -355,6 +355,7 @@ dependencies = [
  "ailloy",
  "anyhow",
  "async-trait",
+ "base64",
  "chrono",
  "cosq-core",
  "dirs 5.0.1",

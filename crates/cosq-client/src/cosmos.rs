@@ -43,6 +43,19 @@ pub struct QueryResult {
     pub per_range: Vec<(String, f64)>,
 }
 
+/// Metrics captured from a query for `cosq explain`.
+#[derive(Debug, Clone, Default)]
+pub struct QueryMetrics {
+    /// Per-range raw query metrics (`x-ms-documentdb-query-metrics`,
+    /// semicolon-separated key=value pairs).
+    pub query_metrics: Vec<(String, String)>,
+    /// Per-range index utilization (decoded from base64
+    /// `x-ms-cosmos-index-utilization` JSON).
+    pub index_metrics: Vec<(String, Value)>,
+    pub request_charge: f64,
+    pub document_count: usize,
+}
+
 /// Execution knobs for queries.
 #[derive(Debug, Clone, Default)]
 pub struct QueryOptions {
@@ -314,6 +327,79 @@ impl CosmosClient {
             request_charge: charge,
             per_range: vec![("scoped".to_string(), charge)],
         })
+    }
+
+    /// Execute a query once per partition-key-range, capturing query metrics
+    /// and index utilization headers (for `cosq explain`).
+    pub async fn query_with_metrics(
+        &self,
+        database: &str,
+        container: &str,
+        sql: &str,
+        parameters: Vec<Value>,
+    ) -> Result<QueryMetrics, ClientError> {
+        let url = format!(
+            "{}/dbs/{}/colls/{}/docs",
+            self.endpoint, database, container
+        );
+        let body = serde_json::json!({"query": sql, "parameters": parameters});
+        let ranges = self.get_partition_key_ranges(database, container).await?;
+
+        let mut metrics = QueryMetrics::default();
+        for range_id in ranges {
+            let date = Self::date_header();
+            let resp = self
+                .http
+                .post(&url)
+                .header("Authorization", self.auth_header())
+                .header("x-ms-date", &date)
+                .header("x-ms-version", API_VERSION)
+                .header("x-ms-documentdb-isquery", "True")
+                .header("x-ms-documentdb-query-enablecrosspartition", "True")
+                .header("x-ms-documentdb-partitionkeyrangeid", &range_id)
+                .header("x-ms-documentdb-populatequerymetrics", "true")
+                .header("x-ms-cosmos-populateindexmetrics", "true")
+                .header("Content-Type", "application/query+json")
+                .json(&body)
+                .send()
+                .await?;
+            let status = resp.status();
+            if !status.is_success() {
+                let text = resp.text().await.unwrap_or_default();
+                return Err(ClientError::api(status.as_u16(), text));
+            }
+            if let Some(qm) = resp
+                .headers()
+                .get("x-ms-documentdb-query-metrics")
+                .and_then(|v| v.to_str().ok())
+            {
+                metrics
+                    .query_metrics
+                    .push((range_id.clone(), qm.to_string()));
+            }
+            if let Some(im) = resp
+                .headers()
+                .get("x-ms-cosmos-index-utilization")
+                .and_then(|v| v.to_str().ok())
+            {
+                use base64::Engine;
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(im)
+                    .ok()
+                    .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                    .unwrap_or(Value::String(im.to_string()));
+                metrics.index_metrics.push((range_id.clone(), decoded));
+            }
+            metrics.request_charge += resp
+                .headers()
+                .get("x-ms-request-charge")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            let parsed: QueryResponse = resp.json().await?;
+            metrics.document_count += parsed.documents.len();
+        }
+        Ok(metrics)
     }
 
     /// Get partition key ranges for a container.

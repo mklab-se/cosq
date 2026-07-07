@@ -123,6 +123,45 @@ pub enum Commands {
         json: bool,
     },
 
+    /// Explain a query's cost, timings, and index usage (the query doctor)
+    Explain {
+        /// The SQL query to analyze
+        sql: String,
+        /// Database name (overrides config)
+        #[arg(long)]
+        db: Option<String>,
+        /// Container name (overrides config)
+        #[arg(long)]
+        container: Option<String>,
+    },
+
+    /// Semantic/full-text search in a container (Cosmos-native, no local index)
+    Search {
+        /// What to search for, in plain language
+        text: String,
+        /// Database name (overrides config)
+        #[arg(long)]
+        db: Option<String>,
+        /// Container name (overrides config)
+        #[arg(long)]
+        container: Option<String>,
+        /// Force a mode instead of auto-detecting from container policies
+        #[arg(long, value_parser = ["vector", "text", "hybrid"])]
+        mode: Option<String>,
+        /// Number of results
+        #[arg(long, default_value_t = 10)]
+        top: usize,
+        /// Print the search SQL without executing
+        #[arg(long)]
+        show_sql: bool,
+        /// Scope to a single partition key value (exact ranking)
+        #[arg(long)]
+        pk: Option<String>,
+        /// Output format
+        #[arg(long, short, value_enum)]
+        output: Option<OutputFormat>,
+    },
+
     /// Interactive shell with context, history, and completion
     Shell,
 
@@ -384,6 +423,37 @@ impl Cli {
                     db,
                     refresh,
                     json,
+                })
+                .await
+            }
+            Some(Commands::Explain { sql, db, container }) => {
+                crate::commands::explain::run(crate::commands::explain::ExplainArgs {
+                    sql,
+                    db,
+                    container,
+                })
+                .await
+            }
+            Some(Commands::Search {
+                text,
+                db,
+                container,
+                mode,
+                top,
+                show_sql,
+                pk,
+                output,
+            }) => {
+                crate::commands::search::run(crate::commands::search::SearchArgs {
+                    text,
+                    db,
+                    container,
+                    mode,
+                    top,
+                    show_sql,
+                    pk,
+                    output,
+                    quiet: self.quiet,
                 })
                 .await
             }

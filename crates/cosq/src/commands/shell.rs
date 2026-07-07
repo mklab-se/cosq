@@ -29,6 +29,8 @@ pub struct ShellContext {
     pub known_containers: Vec<String>,
     /// Ask-mode conversation memory (follow-up questions compose).
     pub ask_memory: crate::commands::ask::AskMemory,
+    /// Last executed SQL (for :explain).
+    pub last_sql: Option<String>,
 }
 
 /// What a line of input means.
@@ -230,6 +232,7 @@ pub async fn run() -> Result<()> {
         known_databases: Vec::new(),
         known_containers: Vec::new(),
         ask_memory: Default::default(),
+        last_sql: None,
     };
 
     // Pre-warm completion listings (best effort).
@@ -483,8 +486,83 @@ async fn handle_meta(ctx: &mut ShellContext, cmd: &str, args: &[String]) -> Resu
                 Err(e) => eprintln!("{} {e:#}", "error:".red().bold()),
             }
         }
-        "search" | "explain" => {
-            eprintln!("`:{cmd}` arrives with the search/doctor layer of this build");
+        "search" => {
+            let (Some(database), Some(container)) =
+                (ctx.profile.database.clone(), ctx.profile.container.clone())
+            else {
+                eprintln!("select a database and container first (:db / :container)");
+                return Ok(false);
+            };
+            if args.is_empty() {
+                eprintln!("usage: :search <text>");
+                return Ok(false);
+            }
+            let text = args.join(" ");
+            let mut card = match crate::commands::schema::ensure_card(
+                &ctx.client,
+                &ctx.profile_name,
+                &ctx.profile,
+                &database,
+                &container,
+                false,
+            )
+            .await
+            {
+                Ok(card) => card,
+                Err(e) => {
+                    eprintln!("{} {e:#}", "error:".red().bold());
+                    return Ok(false);
+                }
+            };
+            match crate::commands::search::execute(
+                &ctx.client,
+                &mut card,
+                &ctx.profile_name,
+                &database,
+                &container,
+                &text,
+                None,
+                10,
+                false,
+                None,
+                false,
+            )
+            .await
+            {
+                Ok((documents, charge)) => {
+                    let mut stdout = std::io::stdout();
+                    let _ = write_results(&mut stdout, &documents, &ctx.format.clone());
+                    eprintln!(
+                        "{}",
+                        format!("{} docs · {charge:.2} RUs", documents.len()).dimmed()
+                    );
+                }
+                Err(e) => eprintln!("{} {e:#}", "error:".red().bold()),
+            }
+        }
+        "explain" => {
+            let sql = match (args.is_empty(), &ctx.last_sql) {
+                (false, _) => args.join(" "),
+                (true, Some(last)) => last.clone(),
+                (true, None) => {
+                    eprintln!("no previous query — usage: :explain [sql]");
+                    return Ok(false);
+                }
+            };
+            let (Some(database), Some(container)) =
+                (ctx.profile.database.clone(), ctx.profile.container.clone())
+            else {
+                eprintln!("select a database and container first (:db / :container)");
+                return Ok(false);
+            };
+            match ctx
+                .client
+                .query_with_metrics(&database, &container, &sql, Vec::new())
+                .await
+            {
+                Ok(metrics) => crate::commands::explain::print_metrics(&sql, &metrics),
+                Err(e) => eprintln!("{} {e:#}", "error:".red().bold()),
+            }
         }
         other => eprintln!("unknown command :{other} — try :help"),
     }
@@ -546,6 +624,7 @@ async fn handle_ask(ctx: &mut ShellContext, question: &str) {
 }
 
 async fn execute_sql(ctx: &mut ShellContext, sql: &str) -> Result<()> {
+    ctx.last_sql = Some(sql.to_string());
     let Some(database) = ctx.profile.database.clone() else {
         eprintln!("select a database first (:db <name>)");
         return Ok(());
