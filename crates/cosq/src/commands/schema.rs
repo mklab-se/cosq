@@ -96,7 +96,7 @@ async fn build_card(
                 // merge descriptions into mechanical fields (paths are truth)
                 for field in &mut fields {
                     if let Some(ai) = ai_fields.iter().find(|f| f.path == field.path) {
-                        field.description = ai.description.clone();
+                        field.description = ai.description.clone().filter(|d| !d.trim().is_empty());
                         if field.values.is_empty() {
                             field.values = ai.values.clone();
                         }
@@ -136,9 +136,10 @@ async fn distill(
         "properties": {
             "fields": {"type": "array", "items": {"type": "object", "properties": {
                 "path": {"type": "string"},
-                "description": {"type": "string"},
-                "values": {"type": "array", "items": {"type": "string"}}
-            }, "required": ["path"], "additionalProperties": false}},
+                "description": {"type": "string", "description": "One line; empty string if nothing useful to say"},
+                "values": {"type": "array", "items": {"type": "string"},
+                           "description": "Low-cardinality value set; empty if not applicable"}
+            }, "required": ["path", "description", "values"], "additionalProperties": false}},
             "relationships": {"type": "array", "items": {"type": "object", "properties": {
                 "field": {"type": "string"},
                 "references": {"type": "string", "description": "container.field, e.g. customers.id"},

@@ -59,7 +59,8 @@ fn generation_schema() -> serde_json::Value {
             "sql": {"type": "string", "description": "A single Cosmos DB NoSQL SELECT statement"},
             "parameters": {"type": "array", "items": {"type": "object", "properties": {
                 "name": {"type": "string", "description": "@-prefixed parameter name"},
-                "value": {}
+                "value": {"type": ["string", "number", "boolean"],
+                          "description": "The parameter's literal value"}
             }, "required": ["name", "value"], "additionalProperties": false}},
             "explanation": {"type": "string", "description": "One sentence: what the query returns"},
             "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0,
