@@ -84,6 +84,45 @@ pub enum Commands {
         max_items: Option<u32>,
     },
 
+    /// Ask a natural-language question — AI generates and runs the SQL
+    Ask {
+        /// The question, in plain language
+        question: String,
+        /// Database name (overrides config)
+        #[arg(long)]
+        db: Option<String>,
+        /// Container name (overrides config)
+        #[arg(long)]
+        container: Option<String>,
+        /// Output format
+        #[arg(long, short, value_enum)]
+        output: Option<OutputFormat>,
+        /// Save the generated SQL as a stored query
+        #[arg(long)]
+        save: Option<String>,
+        /// Print the generated SQL without executing it
+        #[arg(long)]
+        sql_only: bool,
+        /// Skip confirmation prompts
+        #[arg(long, short)]
+        yes: bool,
+    },
+
+    /// Show (building if needed) the AI schema card for a container
+    Schema {
+        /// Container name (overrides config)
+        container: Option<String>,
+        /// Database name (overrides config)
+        #[arg(long)]
+        db: Option<String>,
+        /// Rebuild the card even if cached
+        #[arg(long)]
+        refresh: bool,
+        /// Output the card as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Interactive shell with context, history, and completion
     Shell,
 
@@ -310,6 +349,41 @@ impl Cli {
                     first,
                     max_items,
                     quiet: self.quiet,
+                })
+                .await
+            }
+            Some(Commands::Ask {
+                question,
+                db,
+                container,
+                output,
+                save,
+                sql_only,
+                yes,
+            }) => {
+                crate::commands::ask::run(crate::commands::ask::AskArgs {
+                    question,
+                    db,
+                    container,
+                    output,
+                    save,
+                    sql_only,
+                    yes,
+                    quiet: self.quiet,
+                })
+                .await
+            }
+            Some(Commands::Schema {
+                container,
+                db,
+                refresh,
+                json,
+            }) => {
+                crate::commands::schema::run(crate::commands::schema::SchemaArgs {
+                    container,
+                    db,
+                    refresh,
+                    json,
                 })
                 .await
             }

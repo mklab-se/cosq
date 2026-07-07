@@ -27,6 +27,8 @@ pub struct ShellContext {
     /// Lazily cached listings for completion.
     pub known_databases: Vec<String>,
     pub known_containers: Vec<String>,
+    /// Ask-mode conversation memory (follow-up questions compose).
+    pub ask_memory: crate::commands::ask::AskMemory,
 }
 
 /// What a line of input means.
@@ -227,6 +229,7 @@ pub async fn run() -> Result<()> {
         format: OutputFormat::Table,
         known_databases: Vec::new(),
         known_containers: Vec::new(),
+        ask_memory: Default::default(),
     };
 
     // Pre-warm completion listings (best effort).
@@ -458,16 +461,88 @@ async fn handle_meta(ctx: &mut ShellContext, cmd: &str, args: &[String]) -> Resu
             }
             None => eprintln!("usage: :run <name> [--param value…]"),
         },
-        "schema" | "search" | "explain" => {
-            eprintln!("`:{cmd}` arrives with the AI layer of this build");
+        "schema" => {
+            let (Some(database), Some(container)) =
+                (ctx.profile.database.clone(), ctx.profile.container.clone())
+            else {
+                eprintln!("select a database and container first (:db / :container)");
+                return Ok(false);
+            };
+            let refresh = args.first().map(String::as_str) == Some("--refresh");
+            match crate::commands::schema::ensure_card(
+                &ctx.client,
+                &ctx.profile_name,
+                &ctx.profile,
+                &database,
+                &container,
+                refresh,
+            )
+            .await
+            {
+                Ok(card) => crate::commands::schema::print_card(&card),
+                Err(e) => eprintln!("{} {e:#}", "error:".red().bold()),
+            }
+        }
+        "search" | "explain" => {
+            eprintln!("`:{cmd}` arrives with the search/doctor layer of this build");
         }
         other => eprintln!("unknown command :{other} — try :help"),
     }
     Ok(false)
 }
 
-async fn handle_ask(_ctx: &mut ShellContext, _question: &str) {
-    eprintln!("`? question` arrives with the AI layer of this build");
+async fn handle_ask(ctx: &mut ShellContext, question: &str) {
+    if !cosq_client::ai::is_configured() {
+        eprintln!("AI is not configured — run `cosq ai config` first");
+        return;
+    }
+    let (Some(database), Some(container)) =
+        (ctx.profile.database.clone(), ctx.profile.container.clone())
+    else {
+        eprintln!("select a database and container first (:db / :container)");
+        return;
+    };
+    let card = match crate::commands::schema::ensure_card(
+        &ctx.client,
+        &ctx.profile_name,
+        &ctx.profile,
+        &database,
+        &container,
+        false,
+    )
+    .await
+    {
+        Ok(card) => card,
+        Err(e) => {
+            eprintln!("{} {e:#}", "error:".red().bold());
+            return;
+        }
+    };
+    let generated = match crate::commands::ask::generate(&card, question, &ctx.ask_memory).await {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("{} {e:#}", "error:".red().bold());
+            return;
+        }
+    };
+    if let Err(e) = crate::commands::ask::execute_generated(
+        &ctx.client,
+        &card,
+        &database,
+        &container,
+        question,
+        &generated,
+        ctx.format.clone(),
+        false,
+        true, // the shell shows the SQL before running; no extra confirm
+        false,
+        None,
+        Some(&mut ctx.ask_memory),
+    )
+    .await
+    {
+        eprintln!("{} {e:#}", "error:".red().bold());
+    }
 }
 
 async fn execute_sql(ctx: &mut ShellContext, sql: &str) -> Result<()> {
