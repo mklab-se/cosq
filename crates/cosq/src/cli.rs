@@ -84,6 +84,9 @@ pub enum Commands {
         max_items: Option<u32>,
     },
 
+    /// Interactive shell with context, history, and completion
+    Shell,
+
     /// List databases in the active account
     Databases {
         /// Output as JSON
@@ -310,6 +313,7 @@ impl Cli {
                 })
                 .await
             }
+            Some(Commands::Shell) => crate::commands::shell::run().await,
             Some(Commands::Databases { json }) => crate::commands::list::databases(json).await,
             Some(Commands::Containers { db, json }) => {
                 crate::commands::list::containers(db, json).await

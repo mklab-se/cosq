@@ -64,6 +64,7 @@ minijinja = "2"
 
 # Table output
 comfy-table = "7"
+reedline = "0.42"
 
 # Regex
 regex = "1"

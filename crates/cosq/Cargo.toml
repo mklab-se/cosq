@@ -36,6 +36,7 @@ dirs.workspace = true
 inquire.workspace = true
 minijinja.workspace = true
 comfy-table.workspace = true
+reedline.workspace = true
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/cosq-v{ version }-{ target }.{ archive-format }"
