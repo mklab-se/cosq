@@ -2,6 +2,60 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2026-07-07
+
+From "run SQL from the terminal" to "talk to your data" — while staying a
+lean, pipeable, **read-only** CLI. No backward compatibility with 0.x configs
+(re-run `cosq init`).
+
+### Added — AI layer
+
+- **`cosq ask`**: natural-language question → Cosmos SQL (via ailloy
+  structured output, grounded in the schema card) → executed answer, with
+  `--save`, `--sql-only`, `--yes`, confidence-gated confirmation, and
+  automatic partition scoping of generated SQL.
+- **Schema cards**: cached per-container YAML knowledge (field paths/types/
+  examples/value sets, AI descriptions, inferred cross-container
+  relationships, partition key, vector/full-text policies) at
+  `~/.cosq/schema/<profile>/…`, 7-day TTL, project-local `.cosq/schema/`
+  override. `cosq schema [container] [--refresh] [--json]`.
+- **`cosq search`**: semantic / full-text / hybrid search using Cosmos DB's
+  native engine — query text embedded via ailloy (embed node matched by
+  vector dimensions, remembered per container), `VectorDistance` with exact
+  cross-partition score merge, BM25 `FullTextScore`, `RRF` hybrid, keyword
+  CONTAINS fallback. No local vector store.
+- **`cosq explain`** (query doctor): RU + per-range query metrics, decoded
+  index utilization with recommended single/composite indexes, and an AI
+  diagnosis with the concrete indexingPolicy fix.
+- **`cosq shell`**: reedline REPL with context prompt
+  (`cosq (profile) db/container »`), direct SQL (multi-line), `? question`
+  ask-mode with composing follow-ups (conversation memory), `:` meta-commands,
+  tab completion (metas, databases, containers, stored queries), persistent
+  history, and scriptable non-TTY mode.
+- `queries generate` now builds on schema cards (no per-run resampling).
+- Refreshed `cosq ai skill` (agent skill + rewritten ai-reference).
+
+### Phase 1 — Foundation
+
+- **Parallel cross-partition fan-out** (bounded at 8 concurrent ranges) with
+  per-range RU breakdown at `-v`; queries preserve range order.
+- **Partition scoping**: queries whose WHERE clause pins the partition key run
+  against a single partition (no fan-out); `--pk` forces it. New `--first`
+  and `--max-items` flags.
+- **Cached AAD tokens** (`~/.cache/cosq/tokens.json`, 0600) — one `az` call
+  per expiry window instead of per command. `COSQ_CACHE_DIR` override.
+- **Multi-account profiles** (breaking): config is now named profiles with
+  `default_profile`; select with `--profile` / `COSQ_PROFILE`. Old configs get
+  a clear "run `cosq init`" error. `cosq init --name <profile>` adds more.
+  `COSQ_CONFIG_DIR` override for isolated setups.
+- **`cosq databases` / `cosq containers`** listing commands (containers show
+  partition key + vector/full-text policy indicators).
+- Wire version `2020-07-15` with recorded live spike findings: vector/FTS/RANK
+  queries execute per partition-key-range (cosq's fan-out) and pk-scoped;
+  VectorDistance projects a mergeable score.
+- Deps: serde_yaml → serde_yaml_ng, colored 3; dead error variants removed;
+  stale docs fixed.
+
 ## [0.9.1] - 2026-07-07
 
 ### Changed

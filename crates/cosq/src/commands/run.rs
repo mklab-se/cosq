@@ -50,11 +50,13 @@ pub async fn run(args: RunArgs) -> Result<()> {
 
     // Load config for connection details
     let mut config = Config::load()?;
-    let client = CosmosClient::new(&config.account.endpoint).await?;
+    let (_profile_name, profile) = config.active_mut(None)?;
+    let mut profile = profile.clone();
+    let client = CosmosClient::new(&profile.account.endpoint).await?;
 
     let (database, db_changed) = common::resolve_database(
         &client,
-        &mut config,
+        &mut profile,
         args.db,
         query.metadata.database.as_deref(),
     )
@@ -63,6 +65,9 @@ pub async fn run(args: RunArgs) -> Result<()> {
     if query.is_multi_step() {
         // Multi-step execution: resolve database only (containers are per-step)
         if db_changed {
+            let (name, slot) = config.active_mut(None)?;
+            let _ = name;
+            *slot = profile.clone();
             config.save()?;
         }
 
@@ -135,7 +140,7 @@ pub async fn run(args: RunArgs) -> Result<()> {
         // Single-step execution (original path)
         let (container, ctr_changed) = common::resolve_container(
             &client,
-            &mut config,
+            &mut profile,
             &database,
             args.container,
             query.metadata.container.as_deref(),
@@ -143,12 +148,21 @@ pub async fn run(args: RunArgs) -> Result<()> {
         .await?;
 
         if db_changed || ctr_changed {
+            let (name, slot) = config.active_mut(None)?;
+            let _ = name;
+            *slot = profile.clone();
             config.save()?;
         }
 
         let cosmos_params = StoredQuery::build_cosmos_params(&resolved);
         let result = client
-            .query_with_params(&database, &container, &query.sql, cosmos_params)
+            .query_with_params(
+                &database,
+                &container,
+                &query.sql,
+                cosmos_params,
+                &cosq_client::cosmos::QueryOptions::default(),
+            )
             .await?;
 
         let has_template = args.template.is_some()

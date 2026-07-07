@@ -4,6 +4,7 @@
 //! with AAD token authentication. Handles cross-partition queries by
 //! fetching partition key ranges and fanning out the query.
 
+use futures_util::{StreamExt, TryStreamExt};
 use serde::Deserialize;
 use serde_json::Value;
 use tracing::debug;
@@ -11,13 +12,116 @@ use tracing::debug;
 use crate::auth::{AzCliAuth, COSMOS_RESOURCE};
 use crate::error::ClientError;
 
-const API_VERSION: &str = "2018-12-31";
+/// Data-plane wire version.
+///
+/// Spike findings (2026-07-07, live against a serverless account with
+/// EnableNoSQLVectorSearch + EnableNoSQLFullTextSearch):
+/// - `2018-12-31` and `2020-07-15` behave identically for everything cosq
+///   does; we use the newer one.
+/// - VectorDistance / ORDER BY RANK / RRF queries are REJECTED by the
+///   gateway's naive cross-partition mode ("can not be directly served by
+///   the gateway") but EXECUTE FINE per partition-key-range — which is how
+///   cosq's fan-out already works — and when pk-scoped.
+/// - VectorDistance can be projected (client-side exact merge possible);
+///   FullTextScore cannot (SC2240) — cross-partition FTS merges are
+///   approximate, pk-scoped/single-partition are exact.
+/// - A container with BOTH vector and full-text policies failed to provision
+///   on the serverless test account; vector-only and fts-only succeeded.
+const API_VERSION: &str = "2020-07-15";
+
+/// Maximum concurrent partition-key-range queries during cross-partition
+/// fan-out. Bounded to stay polite to the gateway.
+const MAX_PARALLEL_RANGES: usize = 8;
 
 /// Result of a Cosmos DB SQL query
 #[derive(Debug)]
 pub struct QueryResult {
     pub documents: Vec<Value>,
     pub request_charge: f64,
+    /// Per partition-key-range RU charges (range id, RU). Single-partition
+    /// and scoped queries have one entry.
+    pub per_range: Vec<(String, f64)>,
+}
+
+/// Metrics captured from a query for `cosq explain`.
+#[derive(Debug, Clone, Default)]
+pub struct QueryMetrics {
+    /// Per-range raw query metrics (`x-ms-documentdb-query-metrics`,
+    /// semicolon-separated key=value pairs).
+    pub query_metrics: Vec<(String, String)>,
+    /// Per-range index utilization (decoded from base64
+    /// `x-ms-cosmos-index-utilization` JSON).
+    pub index_metrics: Vec<(String, Value)>,
+    pub request_charge: f64,
+    pub document_count: usize,
+}
+
+/// Execution knobs for queries.
+#[derive(Debug, Clone, Default)]
+pub struct QueryOptions {
+    /// Page size (`x-ms-max-item-count`).
+    pub max_item_count: Option<u32>,
+    /// Stop after this many documents (across ranges/pages).
+    pub first: Option<usize>,
+}
+
+/// Container metadata relevant to cosq: partition key + search policies.
+#[derive(Debug, Clone, Default)]
+pub struct ContainerMeta {
+    /// Partition key paths (multiple for hierarchical partition keys).
+    pub pk_paths: Vec<String>,
+    /// Vector embedding policy entries: (path, dimensions, distance function).
+    pub vector_paths: Vec<(String, u32, String)>,
+    /// Full-text policy paths.
+    pub full_text_paths: Vec<String>,
+}
+
+impl ContainerMeta {
+    pub fn from_response(raw: &Value) -> Self {
+        let pk_paths = raw
+            .pointer("/partitionKey/paths")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+        let vector_paths = raw
+            .pointer("/vectorEmbeddingPolicy/vectorEmbeddings")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|e| {
+                        Some((
+                            e.get("path")?.as_str()?.to_string(),
+                            e.get("dimensions")?.as_u64()? as u32,
+                            e.get("distanceFunction")
+                                .and_then(Value::as_str)
+                                .unwrap_or("cosine")
+                                .to_string(),
+                        ))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let full_text_paths = raw
+            .pointer("/fullTextPolicy/fullTextPaths")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|e| e.get("path").and_then(Value::as_str))
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+        ContainerMeta {
+            pk_paths,
+            vector_paths,
+            full_text_paths,
+        }
+    }
 }
 
 /// Cosmos DB REST API response for queries
@@ -75,12 +179,16 @@ impl CosmosClient {
     /// Create a new Cosmos client, acquiring a Cosmos DB token via the Azure CLI.
     pub async fn new(endpoint: &str) -> Result<Self, ClientError> {
         let token = AzCliAuth::get_token(COSMOS_RESOURCE).await?;
-        let endpoint = endpoint.trim_end_matches('/').to_string();
-        Ok(Self {
+        Ok(Self::with_token(endpoint, token))
+    }
+
+    /// Create a client with a pre-acquired token (tests, alternate auth).
+    pub fn with_token(endpoint: &str, token: String) -> Self {
+        Self {
             http: reqwest::Client::new(),
-            endpoint,
+            endpoint: endpoint.trim_end_matches('/').to_string(),
             token,
-        })
+        }
     }
 
     /// Build the Authorization header value for AAD token auth.
@@ -160,6 +268,140 @@ impl CosmosClient {
         Ok(names)
     }
 
+    /// Container metadata (partition key paths + search policies).
+    pub async fn get_container(
+        &self,
+        database: &str,
+        container: &str,
+    ) -> Result<ContainerMeta, ClientError> {
+        let url = format!("{}/dbs/{}/colls/{}", self.endpoint, database, container);
+        let date = Self::date_header();
+        let resp = self
+            .http
+            .get(&url)
+            .header("Authorization", self.auth_header())
+            .header("x-ms-date", &date)
+            .header("x-ms-version", API_VERSION)
+            .send()
+            .await?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(ClientError::api(status.as_u16(), body));
+        }
+        let raw: Value = resp.json().await?;
+        Ok(ContainerMeta::from_response(&raw))
+    }
+
+    /// Execute a query scoped to a single logical partition — no fan-out.
+    pub async fn query_scoped(
+        &self,
+        database: &str,
+        container: &str,
+        sql: &str,
+        parameters: Vec<Value>,
+        pk_value: &Value,
+        opts: &QueryOptions,
+    ) -> Result<QueryResult, ClientError> {
+        debug!(
+            database,
+            container,
+            sql,
+            ?pk_value,
+            "executing partition-scoped query"
+        );
+        let url = format!(
+            "{}/dbs/{}/colls/{}/docs",
+            self.endpoint, database, container
+        );
+        let body = serde_json::json!({"query": sql, "parameters": parameters});
+        let pk_header = serde_json::to_string(&vec![pk_value.clone()])
+            .map_err(|e| ClientError::Other(format!("cannot encode partition key: {e}")))?;
+        let (documents, charge) = self
+            .query_partition_with(&url, &body, opts, |req| {
+                req.header("x-ms-documentdb-partitionkey", &pk_header)
+            })
+            .await?;
+        Ok(QueryResult {
+            documents,
+            request_charge: charge,
+            per_range: vec![("scoped".to_string(), charge)],
+        })
+    }
+
+    /// Execute a query once per partition-key-range, capturing query metrics
+    /// and index utilization headers (for `cosq explain`).
+    pub async fn query_with_metrics(
+        &self,
+        database: &str,
+        container: &str,
+        sql: &str,
+        parameters: Vec<Value>,
+    ) -> Result<QueryMetrics, ClientError> {
+        let url = format!(
+            "{}/dbs/{}/colls/{}/docs",
+            self.endpoint, database, container
+        );
+        let body = serde_json::json!({"query": sql, "parameters": parameters});
+        let ranges = self.get_partition_key_ranges(database, container).await?;
+
+        let mut metrics = QueryMetrics::default();
+        for range_id in ranges {
+            let date = Self::date_header();
+            let resp = self
+                .http
+                .post(&url)
+                .header("Authorization", self.auth_header())
+                .header("x-ms-date", &date)
+                .header("x-ms-version", API_VERSION)
+                .header("x-ms-documentdb-isquery", "True")
+                .header("x-ms-documentdb-query-enablecrosspartition", "True")
+                .header("x-ms-documentdb-partitionkeyrangeid", &range_id)
+                .header("x-ms-documentdb-populatequerymetrics", "true")
+                .header("x-ms-cosmos-populateindexmetrics", "true")
+                .header("Content-Type", "application/query+json")
+                .json(&body)
+                .send()
+                .await?;
+            let status = resp.status();
+            if !status.is_success() {
+                let text = resp.text().await.unwrap_or_default();
+                return Err(ClientError::api(status.as_u16(), text));
+            }
+            if let Some(qm) = resp
+                .headers()
+                .get("x-ms-documentdb-query-metrics")
+                .and_then(|v| v.to_str().ok())
+            {
+                metrics
+                    .query_metrics
+                    .push((range_id.clone(), qm.to_string()));
+            }
+            if let Some(im) = resp
+                .headers()
+                .get("x-ms-cosmos-index-utilization")
+                .and_then(|v| v.to_str().ok())
+            {
+                use base64::Engine;
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(im)
+                    .ok()
+                    .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                    .unwrap_or(Value::String(im.to_string()));
+                metrics.index_metrics.push((range_id.clone(), decoded));
+            }
+            metrics.request_charge += resp
+                .headers()
+                .get("x-ms-request-charge")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(0.0);
+            let parsed: QueryResponse = resp.json().await?;
+            metrics.document_count += parsed.documents.len();
+        }
+        Ok(metrics)
+    }
+
     /// Get partition key ranges for a container.
     async fn get_partition_key_ranges(
         &self,
@@ -202,7 +444,26 @@ impl CosmosClient {
         &self,
         url: &str,
         body: &Value,
+        opts: &QueryOptions,
         partition_key_range_id: &str,
+    ) -> Result<(Vec<Value>, f64), ClientError> {
+        self.query_partition_with(url, body, opts, |req| {
+            req.header(
+                "x-ms-documentdb-partitionkeyrangeid",
+                partition_key_range_id,
+            )
+        })
+        .await
+    }
+
+    /// Query with caller-supplied scoping headers (range id or partition key),
+    /// following continuation tokens.
+    async fn query_partition_with(
+        &self,
+        url: &str,
+        body: &Value,
+        opts: &QueryOptions,
+        scope: impl Fn(reqwest::RequestBuilder) -> reqwest::RequestBuilder,
     ) -> Result<(Vec<Value>, f64), ClientError> {
         let mut documents = Vec::new();
         let mut total_charge = 0.0_f64;
@@ -210,20 +471,20 @@ impl CosmosClient {
 
         loop {
             let date = Self::date_header();
-            let mut request = self
-                .http
-                .post(url)
-                .header("Authorization", self.auth_header())
-                .header("x-ms-date", &date)
-                .header("x-ms-version", API_VERSION)
-                .header("x-ms-documentdb-isquery", "True")
-                .header("x-ms-documentdb-query-enablecrosspartition", "True")
-                .header(
-                    "x-ms-documentdb-partitionkeyrangeid",
-                    partition_key_range_id,
-                )
-                .header("Content-Type", "application/query+json")
-                .json(body);
+            let mut request = scope(
+                self.http
+                    .post(url)
+                    .header("Authorization", self.auth_header())
+                    .header("x-ms-date", &date)
+                    .header("x-ms-version", API_VERSION)
+                    .header("x-ms-documentdb-isquery", "True")
+                    .header("x-ms-documentdb-query-enablecrosspartition", "True")
+                    .header("Content-Type", "application/query+json"),
+            )
+            .json(body);
+            if let Some(count) = opts.max_item_count {
+                request = request.header("x-ms-max-item-count", count.to_string());
+            }
 
             if let Some(ref token) = continuation {
                 request = request.header("x-ms-continuation", token);
@@ -260,6 +521,13 @@ impl CosmosClient {
             let query_resp: QueryResponse = resp.json().await?;
             documents.extend(query_resp.documents);
 
+            if let Some(first) = opts.first {
+                if documents.len() >= first {
+                    documents.truncate(first);
+                    break;
+                }
+            }
+
             match next_continuation {
                 Some(token) if !token.is_empty() => {
                     debug!("continuing with pagination token");
@@ -279,8 +547,14 @@ impl CosmosClient {
         container: &str,
         sql: &str,
     ) -> Result<QueryResult, ClientError> {
-        self.query_with_params(database, container, sql, Vec::new())
-            .await
+        self.query_with_params(
+            database,
+            container,
+            sql,
+            Vec::new(),
+            &QueryOptions::default(),
+        )
+        .await
     }
 
     /// Execute a parameterized SQL query against a container.
@@ -293,6 +567,7 @@ impl CosmosClient {
         container: &str,
         sql: &str,
         parameters: Vec<Value>,
+        opts: &QueryOptions,
     ) -> Result<QueryResult, ClientError> {
         debug!(database, container, sql, params = ?parameters, "executing query");
 
@@ -305,23 +580,44 @@ impl CosmosClient {
             "parameters": parameters
         });
 
-        // Get partition key ranges and fan out the query
+        // Get partition key ranges and fan out the query — in parallel,
+        // bounded, preserving range order in the collected output.
         let ranges = self.get_partition_key_ranges(database, container).await?;
         debug!(count = ranges.len(), "querying across partition key ranges");
 
+        let results: Vec<(String, Vec<Value>, f64)> =
+            futures_util::stream::iter(ranges.into_iter().map(|range_id| {
+                let client = self.clone();
+                let url = url.clone();
+                let body = body.clone();
+                let opts = opts.clone();
+                async move {
+                    let (docs, charge) = client
+                        .query_partition(&url, &body, &opts, &range_id)
+                        .await?;
+                    debug!(
+                        range_id,
+                        docs = docs.len(),
+                        charge,
+                        "partition query complete"
+                    );
+                    Ok::<_, ClientError>((range_id, docs, charge))
+                }
+            }))
+            .buffered(MAX_PARALLEL_RANGES)
+            .try_collect()
+            .await?;
+
         let mut all_documents = Vec::new();
         let mut total_charge = 0.0_f64;
-
-        for range_id in &ranges {
-            let (docs, charge) = self.query_partition(&url, &body, range_id).await?;
-            debug!(
-                range_id,
-                docs = docs.len(),
-                charge,
-                "partition query complete"
-            );
+        let mut per_range = Vec::new();
+        for (range_id, docs, charge) in results {
             all_documents.extend(docs);
             total_charge += charge;
+            per_range.push((range_id, charge));
+        }
+        if let Some(first) = opts.first {
+            all_documents.truncate(first);
         }
 
         debug!(
@@ -333,6 +629,7 @@ impl CosmosClient {
         Ok(QueryResult {
             documents: all_documents,
             request_charge: total_charge,
+            per_range,
         })
     }
 }

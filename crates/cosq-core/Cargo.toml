@@ -9,6 +9,8 @@ rust-version.workspace = true
 description = "Core types and configuration for cosq"
 
 [dependencies]
+anyhow.workspace = true
+chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true

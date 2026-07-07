@@ -234,14 +234,19 @@ async fn generate(
     quiet: bool,
 ) -> Result<()> {
     let mut config = Config::load()?;
+    let (_profile_name, profile) = config.active_mut(None)?;
+    let mut profile = profile.clone();
 
     // --- Step 1: Resolve database ---
-    let client = cosq_client::cosmos::CosmosClient::new(&config.account.endpoint).await?;
+    let client = cosq_client::cosmos::CosmosClient::new(&profile.account.endpoint).await?;
 
     let (database, db_changed) =
-        super::common::resolve_database(&client, &mut config, cli_db, None).await?;
+        super::common::resolve_database(&client, &mut profile, cli_db, None).await?;
 
     if db_changed {
+        let (name, slot) = config.active_mut(None)?;
+        let _ = name;
+        *slot = profile.clone();
         config.save()?;
     }
 
@@ -252,23 +257,44 @@ async fn generate(
         pick_containers_interactive(&client, &database).await?
     };
 
-    // --- Step 3: Sample documents from all containers ---
+    // --- Step 3: Load schema cards (cached; replaces per-run sampling) ---
+    let profile_name_for_cards = {
+        let (name, _) = config.active(None)?;
+        name.to_string()
+    };
     let mut container_samples: Vec<(String, String)> = Vec::new();
     for ctr in &containers {
-        if !quiet {
-            eprintln!("{}", format!("Sampling documents from {ctr}...").dimmed());
-        }
-        let sample_result = client
-            .query(&database, ctr, "SELECT TOP 3 * FROM c")
-            .await
-            .with_context(|| format!("failed to sample documents from {ctr}"))?;
-
-        let sample_json = if sample_result.documents.is_empty() {
-            "(container is empty)".to_string()
-        } else {
-            format_sample_documents(&sample_result.documents)
+        let context_text = match super::schema::ensure_card(
+            &client,
+            &profile_name_for_cards,
+            &profile,
+            &database,
+            ctr,
+            false,
+        )
+        .await
+        {
+            Ok(card) => card.to_prompt_yaml(),
+            Err(e) => {
+                if !quiet {
+                    eprintln!(
+                        "{}",
+                        format!("(schema card failed for {ctr}: {e:#}; sampling directly)")
+                            .dimmed()
+                    );
+                }
+                let sample_result = client
+                    .query(&database, ctr, "SELECT TOP 3 * FROM c")
+                    .await
+                    .with_context(|| format!("failed to sample documents from {ctr}"))?;
+                if sample_result.documents.is_empty() {
+                    "(container is empty)".to_string()
+                } else {
+                    format_sample_documents(&sample_result.documents)
+                }
+            }
         };
-        container_samples.push((ctr.clone(), sample_json));
+        container_samples.push((ctr.clone(), context_text));
     }
 
     // --- Step 4: Get description (from arg or interactive prompt) ---

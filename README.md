@@ -34,6 +34,9 @@ cosq init
 # Run a query
 cosq query "SELECT * FROM c"
 
+# Or just ask
+cosq ask "how many orders were cancelled last week, by region?"
+
 # Output as table or CSV
 cosq query "SELECT * FROM c" --output table
 cosq query "SELECT * FROM c" --output csv
@@ -41,6 +44,49 @@ cosq query "SELECT * FROM c" --output csv
 # Pipe-friendly (JSON to stdout, metadata to stderr)
 cosq query "SELECT c.name FROM c" -q | jq '.[].name'
 ```
+
+## Talk to your data
+
+```bash
+# Natural-language questions, grounded in a cached AI "schema card"
+# of your container (fields, types, values, relationships)
+cosq ask "top 5 customers by total order value" --save top-customers
+cosq schema orders          # inspect the card
+
+# Semantic & full-text search — Cosmos DB's own vector/BM25 engine,
+# query embedding via ailloy; no local index
+cosq search "refund complaints about late delivery" --top 5
+
+# The query doctor: cost, timings, index usage, concrete fixes
+cosq explain "SELECT * FROM c WHERE c.status = 'open' ORDER BY c.created"
+```
+
+## Interactive shell
+
+```bash
+cosq shell
+```
+
+```
+cosq (work) appdb/orders » SELECT TOP 5 c.id FROM c;
+cosq (work) appdb/orders » ? which customer ordered the most this month
+cosq (work) appdb/orders » ? and what did they order      # follow-ups compose
+cosq (work) appdb/orders » :search urgent tickets about billing
+cosq (work) appdb/orders » :explain
+cosq (work) appdb/orders » :help
+```
+
+Context (profile, database, container, format), tab completion, persistent
+history — and piped stdin runs the same commands non-interactively.
+
+## Fast by default
+
+- Cross-partition queries fan out to partition ranges **in parallel**
+- Queries pinning the partition key are **auto-scoped** to one partition
+  (`--pk` forces it; `--first N` stops early)
+- AAD tokens are cached (one `az` call per hour, not per command)
+- Multiple accounts via **profiles**: `cosq init --name work`, then
+  `--profile work` or `COSQ_PROFILE=work`
 
 ## Stored Queries
 
@@ -97,8 +143,8 @@ Steps execute in dependency order — independent steps run in parallel, while s
 Generate stored queries from natural language — the AI samples your actual documents for field-accurate SQL and auto-generates output templates:
 
 ```bash
-# Set up AI (auto-detects Claude, Codex, Copilot, Ollama, or Azure OpenAI)
-cosq ai init
+# Set up AI (any provider via ailloy: OpenAI, Anthropic, Foundry, Ollama, ...)
+cosq ai config
 
 # Fully interactive: pick database, container, describe your query
 cosq queries generate
@@ -109,6 +155,12 @@ cosq queries generate "active users by region in the last 30 days"
 # Target a specific database/container
 cosq queries generate --db mydb --container users "top 10 by login count"
 ```
+
+## For AI agents
+
+`cosq ai skill --emit > ~/.claude/skills/cosq.md` gives coding agents a skill
+with the full command surface; `cosq ai skill --reference` prints the complete
+reference they fetch at runtime. cosq is read-only against your data by design.
 
 See [INSTALL.md](INSTALL.md) for all installation methods, shell completions, and platform-specific instructions.
 

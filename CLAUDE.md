@@ -32,21 +32,31 @@ crates/
         init.rs     # `cosq init` (interactive Cosmos DB account setup)
         ai.rs       # `cosq ai` (AI feature management: status, test, enable/disable, config)
         common.rs   # Shared DB/container resolution (CLI flag > metadata > config > picker)
-        query.rs    # `cosq query` (SQL query execution with output formatting)
+        query.rs    # `cosq query` (SQL execution, auto partition-scoping, --pk/--first)
+        ask.rs      # `cosq ask` (NL question -> SQL via schema card + structured output)
+        schema.rs   # `cosq schema` (build/cache/print AI schema cards)
+        search.rs   # `cosq search` (Cosmos-native vector/FTS/hybrid via ailloy embeddings)
+        explain.rs  # `cosq explain` (query doctor: metrics, index utilization, AI diagnosis)
+        shell.rs    # `cosq shell` (reedline REPL: SQL, ? ask-mode, : meta-commands)
+        list.rs     # `cosq databases` / `cosq containers`
         run.rs      # `cosq run` (execute stored queries with parameters)
         pipeline.rs # Multi-step query pipeline executor (dependency graph, parallel execution)
         queries.rs  # `cosq queries` (list/create/edit/delete/show/generate stored queries)
+        skill.rs    # `cosq ai skill` (agent skill emit + runtime reference)
   cosq-core/        # Core types and configuration
     src/
       lib.rs        # Module exports
-      config.rs     # Config format (load/save from ~/.config/cosq/)
+      config.rs     # Profiles config (named accounts, default_profile; COSQ_PROFILE/COSQ_CONFIG_DIR)
+      pk_detect.rs  # Partition-key equality detection for auto-scoping
+      schema_card.rs # Schema card model, cache paths, TTL, mechanical field extraction
       stored_query.rs # Stored query format (.cosq files), parameter resolution, query discovery
   cosq-client/      # Azure Cosmos DB client and authentication
     src/
       lib.rs        # Module exports
-      auth.rs       # Azure CLI auth (token acquisition, login status)
+      auth.rs       # Azure CLI auth with on-disk token cache (~/.cache/cosq/tokens.json)
       arm.rs        # ARM discovery (subscriptions, Cosmos DB accounts, RBAC role management)
-      cosmos.rs     # Cosmos DB data plane client (query, parameterized query, list databases/containers)
+      cosmos.rs     # Data plane client: parallel per-range fan-out, pk-scoped queries,
+                    # container metadata (policies), query/index metrics; x-ms-version 2020-07-15
       ai.rs         # Unified AI dispatcher via ailloy library
       error.rs      # ClientError types with helpful hints
 ```
@@ -62,14 +72,15 @@ crates/
 - Async runtime: `tokio`
 - Logging: `tracing` + `tracing-subscriber` with `-v`/`-vv` verbosity levels
 - Colored output via `colored` crate (respects `--no-color`)
-- Interactive prompts via `dialoguer` with fuzzy-select
+- Interactive prompts via `inquire`
 - Error handling: `anyhow` (CLI), `thiserror` (libraries)
 - Azure auth: delegates to `az` CLI for token acquisition
 - Cosmos DB data plane: REST API with AAD token auth, parameterized queries, pagination via `x-ms-continuation`
 - Stored queries: `.cosq` files with YAML front matter + SQL body, stored in `~/.cosq/queries/` (user) and `.cosq/queries/` (project, overrides user). Supports multi-step queries with `steps:` metadata and `-- step: <name>` SQL markers, cross-step references via `@step.field`
 - Output formatting: JSON (default), JSON-compact, table (comfy-table), CSV, MiniJinja templates
-- AI query generation: schema-aware via ailloy unified AI library — samples real documents for field context, generates SQL + templates, supports multi-turn conversation. Configured via `cosq ai config` (uses `~/.config/ailloy/config.yaml`)
-- Config: `~/.config/cosq/config.yaml` (via `dirs::config_dir()`), includes optional `database`/`container` sections
+- AI: everything flows through cached schema cards + ailloy structured output (json_schema); `cosq ask` for one-off questions, `queries generate` for reusable stored queries, `cosq search` embeds query text via an embed-capable ailloy node. Configured via `cosq ai config` (`~/.config/ailloy/config.yaml`; folder-local `.ailloy.yaml` wins)
+- Config: named profiles in `~/.config/cosq/config.yaml`; selection --profile > COSQ_PROFILE > default_profile > sole profile. cosq is READ-ONLY against Cosmos data — no writes, ever
+- Search executes on Cosmos's engine per partition-key-range (gateway rejects naive cross-partition vector/RANK queries); VectorDistance projects a mergeable score, FullTextScore does not (cross-partition FTS ranking is approximate)
 - Update checker: background task, cached at `~/.cache/cosq/`, skip with `COSQ_NO_UPDATE_CHECK=1`
 
 ## Releasing

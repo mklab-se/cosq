@@ -64,7 +64,13 @@ pub async fn execute(
 
             let cosmos_params = build_step_params(sql, query, params, &step_results)?;
             let result = client
-                .query_with_params(database, &step_def.container, sql, cosmos_params)
+                .query_with_params(
+                    database,
+                    &step_def.container,
+                    sql,
+                    cosmos_params,
+                    &cosq_client::cosmos::QueryOptions::default(),
+                )
                 .await
                 .with_context(|| format!("step '{step_name}' failed"))?;
 
@@ -96,7 +102,13 @@ pub async fn execute(
 
                 handles.push(tokio::spawn(async move {
                     let result = client
-                        .query_with_params(&db, &container, &sql, cosmos_params)
+                        .query_with_params(
+                            &db,
+                            &container,
+                            &sql,
+                            cosmos_params,
+                            &cosq_client::cosmos::QueryOptions::default(),
+                        )
                         .await;
                     (name, result)
                 }));

@@ -27,6 +27,19 @@ pub enum ConfigError {
 
     #[error("could not determine config directory")]
     NoConfigDir,
+
+    #[error(
+        "no profile selected and no default set (available: {0}) — pass --profile or set default_profile"
+    )]
+    NoProfile(String),
+
+    #[error("unknown profile '{0}' (available: {1})")]
+    UnknownProfile(String, String),
+
+    #[error(
+        "the config format changed in cosq 1.0 (named profiles) — run `cosq init` to recreate ~/.config/cosq/config.yaml"
+    )]
+    OldFormat,
 }
 
 /// Cosmos DB account configuration
@@ -45,9 +58,9 @@ pub struct AccountConfig {
     pub endpoint: String,
 }
 
-/// Top-level cosq configuration
+/// One named account profile.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Config {
+pub struct Profile {
     /// Cosmos DB account details
     pub account: AccountConfig,
 
@@ -58,11 +71,71 @@ pub struct Config {
     /// Default container name
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub container: Option<String>,
+
+    /// Per-container ailloy embedding-node mapping (used by `cosq search`).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub embed_models: std::collections::BTreeMap<String, String>,
+}
+
+/// Top-level cosq configuration: named profiles + a default selection.
+///
+/// Profile resolution: `--profile` flag > `COSQ_PROFILE` env > `default_profile`
+/// > the sole profile when exactly one exists.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Config {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_profile: Option<String>,
+
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub profiles: std::collections::BTreeMap<String, Profile>,
+}
+
+impl Config {
+    /// Resolve the active profile.
+    pub fn active(&self, selected: Option<&str>) -> Result<(&str, &Profile), ConfigError> {
+        let from_env = std::env::var("COSQ_PROFILE").ok();
+        let name = selected
+            .map(str::to_string)
+            .or(from_env)
+            .or_else(|| self.default_profile.clone())
+            .or_else(|| {
+                (self.profiles.len() == 1).then(|| self.profiles.keys().next().unwrap().clone())
+            })
+            .ok_or_else(|| ConfigError::NoProfile(self.profile_names()))?;
+        let (key, profile) = self
+            .profiles
+            .get_key_value(&name)
+            .ok_or_else(|| ConfigError::UnknownProfile(name.clone(), self.profile_names()))?;
+        Ok((key.as_str(), profile))
+    }
+
+    /// Mutable access to the active profile (same resolution as [`active`]).
+    pub fn active_mut(
+        &mut self,
+        selected: Option<&str>,
+    ) -> Result<(String, &mut Profile), ConfigError> {
+        let (name, _) = self.active(selected)?;
+        let name = name.to_string();
+        let profile = self.profiles.get_mut(&name).expect("resolved above");
+        Ok((name, profile))
+    }
+
+    fn profile_names(&self) -> String {
+        if self.profiles.is_empty() {
+            "none configured — run `cosq init`".to_string()
+        } else {
+            self.profiles.keys().cloned().collect::<Vec<_>>().join(", ")
+        }
+    }
 }
 
 impl Config {
     /// Return the path to the config file: `<config_dir>/cosq/config.yaml`.
+    /// `COSQ_CONFIG_DIR` overrides the directory (tests, isolated setups).
     pub fn path() -> Result<PathBuf, ConfigError> {
+        if let Ok(dir) = std::env::var("COSQ_CONFIG_DIR") {
+            return Ok(PathBuf::from(dir).join(FILENAME));
+        }
         dirs::config_dir()
             .map(|d| d.join(APP_DIR).join(FILENAME))
             .ok_or(ConfigError::NoConfigDir)
@@ -83,6 +156,12 @@ impl Config {
                 ConfigError::Read(e)
             }
         })?;
+        // Old (pre-1.0) config had a top-level `account:` — point users at init.
+        if let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(&contents) {
+            if value.get("account").is_some() && value.get("profiles").is_none() {
+                return Err(ConfigError::OldFormat);
+            }
+        }
         let config: Config = serde_yaml::from_str(&contents)?;
         Ok(config)
     }
@@ -120,129 +199,88 @@ mod tests {
     }
 
     #[test]
-    fn test_config_roundtrip() {
-        let config = Config {
-            account: AccountConfig {
-                name: "test-account".into(),
-                subscription: "sub-123".into(),
-                resource_group: "rg-test".into(),
-                endpoint: "https://test-account.documents.azure.com:443/".into(),
-            },
-            database: None,
-            container: None,
-        };
-
-        let yaml = serde_yaml::to_string(&config).unwrap();
-        let parsed: Config = serde_yaml::from_str(&yaml).unwrap();
-        assert_eq!(parsed.account.name, "test-account");
-        assert_eq!(
-            parsed.account.endpoint,
-            "https://test-account.documents.azure.com:443/"
-        );
-        assert!(parsed.database.is_none());
-        assert!(parsed.container.is_none());
-    }
-
-    #[test]
-    fn test_config_roundtrip_with_database_container() {
-        let config = Config {
-            account: AccountConfig {
-                name: "test-account".into(),
-                subscription: "sub-123".into(),
-                resource_group: "rg-test".into(),
-                endpoint: "https://test-account.documents.azure.com:443/".into(),
-            },
-            database: Some("mydb".into()),
-            container: Some("users".into()),
-        };
-
-        let yaml = serde_yaml::to_string(&config).unwrap();
-        let parsed: Config = serde_yaml::from_str(&yaml).unwrap();
-        assert_eq!(parsed.database.as_deref(), Some("mydb"));
-        assert_eq!(parsed.container.as_deref(), Some("users"));
-    }
-
-    #[test]
-    fn test_config_backward_compat() {
-        let yaml = r#"
-account:
-  name: old-account
-  subscription: sub-old
-  resource_group: rg-old
-  endpoint: https://old-account.documents.azure.com:443/
-"#;
-        let parsed: Config = serde_yaml::from_str(yaml).unwrap();
-        assert_eq!(parsed.account.name, "old-account");
-        assert!(parsed.database.is_none());
-        assert!(parsed.container.is_none());
-    }
-
-    #[test]
-    fn test_config_skip_serializing_none() {
-        let config = Config {
-            account: AccountConfig {
-                name: "test".into(),
-                subscription: "sub".into(),
-                resource_group: "rg".into(),
-                endpoint: "https://test.documents.azure.com:443/".into(),
-            },
-            database: None,
-            container: None,
-        };
-
-        let yaml = serde_yaml::to_string(&config).unwrap();
-        assert!(!yaml.contains("database"));
-        assert!(!yaml.contains("container"));
-    }
-
-    #[test]
-    fn test_config_save_and_load_from() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("config.yaml");
-        let config = Config {
-            account: AccountConfig {
-                name: "my-cosmos".into(),
-                subscription: "sub-abc".into(),
-                resource_group: "rg-prod".into(),
-                endpoint: "https://my-cosmos.documents.azure.com:443/".into(),
-            },
-            database: Some("testdb".into()),
-            container: None,
-        };
-
-        config.save_to(&path).unwrap();
-        assert!(path.exists());
-
-        let loaded = Config::load_from(&path).unwrap();
-        assert_eq!(loaded.account.name, "my-cosmos");
-        assert_eq!(loaded.database.as_deref(), Some("testdb"));
-        assert!(loaded.container.is_none());
-    }
-
-    #[test]
     fn test_config_load_not_found() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("nonexistent.yaml");
         let result = Config::load_from(&path);
         assert!(matches!(result, Err(ConfigError::NotFound)));
     }
+}
+
+#[cfg(test)]
+mod profile_tests {
+    use super::*;
+
+    fn cfg(names: &[&str], default: Option<&str>) -> Config {
+        let mut profiles = std::collections::BTreeMap::new();
+        for n in names {
+            profiles.insert(
+                n.to_string(),
+                Profile {
+                    account: AccountConfig {
+                        name: format!("{n}-acct"),
+                        subscription: "s".into(),
+                        resource_group: "rg".into(),
+                        endpoint: format!("https://{n}.documents.azure.com"),
+                    },
+                    database: None,
+                    container: None,
+                    embed_models: Default::default(),
+                },
+            );
+        }
+        Config {
+            default_profile: default.map(str::to_string),
+            profiles,
+        }
+    }
 
     #[test]
-    fn test_config_save_to_creates_parent_dirs() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("nested").join("dir").join("config.yaml");
-        let config = Config {
-            account: AccountConfig {
-                name: "test".into(),
-                subscription: "sub".into(),
-                resource_group: "rg".into(),
-                endpoint: "https://test.documents.azure.com:443/".into(),
-            },
-            database: None,
-            container: None,
-        };
+    fn explicit_selection_wins() {
+        let c = cfg(&["work", "demo"], Some("work"));
+        assert_eq!(c.active(Some("demo")).unwrap().0, "demo");
+    }
 
-        config.save_to(&path).unwrap();
-        assert!(path.exists());
+    #[test]
+    fn default_profile_used_when_unselected() {
+        let c = cfg(&["work", "demo"], Some("demo"));
+        assert_eq!(c.active(None).unwrap().0, "demo");
+    }
+
+    #[test]
+    fn sole_profile_is_implicit_default() {
+        let c = cfg(&["only"], None);
+        assert_eq!(c.active(None).unwrap().0, "only");
+    }
+
+    #[test]
+    fn errors_list_available_profiles() {
+        let c = cfg(&["work", "demo"], None);
+        let err = c.active(Some("nope")).unwrap_err().to_string();
+        assert!(err.contains("demo") && err.contains("work"));
+        let err = c.active(None).unwrap_err().to_string();
+        assert!(err.contains("--profile"));
+    }
+
+    #[test]
+    fn old_format_detected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("config.yaml");
+        std::fs::write(
+            &path,
+            "account:\n  name: a\n  subscription: s\n  resource_group: r\n  endpoint: e\n",
+        )
+        .unwrap();
+        let err = Config::load_from(&path).unwrap_err().to_string();
+        assert!(err.contains("cosq init"), "{err}");
+    }
+
+    #[test]
+    fn round_trip() {
+        let c = cfg(&["work"], Some("work"));
+        let yaml = serde_yaml::to_string(&c).unwrap();
+        let back: Config = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(back.default_profile.as_deref(), Some("work"));
+        assert!(back.profiles.contains_key("work"));
     }
 }

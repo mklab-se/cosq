@@ -40,6 +40,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_color: bool,
 
+    /// Account profile to use (also honors COSQ_PROFILE)
+    #[arg(long, global = true)]
+    pub profile: Option<String>,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -66,6 +70,116 @@ pub enum Commands {
         /// Path to a MiniJinja template file for output formatting
         #[arg(long)]
         template: Option<String>,
+
+        /// Scope the query to a single partition key value (skips fan-out)
+        #[arg(long)]
+        pk: Option<String>,
+
+        /// Stop after N documents
+        #[arg(long)]
+        first: Option<usize>,
+
+        /// Page size per request (x-ms-max-item-count)
+        #[arg(long)]
+        max_items: Option<u32>,
+    },
+
+    /// Ask a natural-language question — AI generates and runs the SQL
+    Ask {
+        /// The question, in plain language
+        question: String,
+        /// Database name (overrides config)
+        #[arg(long)]
+        db: Option<String>,
+        /// Container name (overrides config)
+        #[arg(long)]
+        container: Option<String>,
+        /// Output format
+        #[arg(long, short, value_enum)]
+        output: Option<OutputFormat>,
+        /// Save the generated SQL as a stored query
+        #[arg(long)]
+        save: Option<String>,
+        /// Print the generated SQL without executing it
+        #[arg(long)]
+        sql_only: bool,
+        /// Skip confirmation prompts
+        #[arg(long, short)]
+        yes: bool,
+    },
+
+    /// Show (building if needed) the AI schema card for a container
+    Schema {
+        /// Container name (overrides config)
+        container: Option<String>,
+        /// Database name (overrides config)
+        #[arg(long)]
+        db: Option<String>,
+        /// Rebuild the card even if cached
+        #[arg(long)]
+        refresh: bool,
+        /// Output the card as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Explain a query's cost, timings, and index usage (the query doctor)
+    Explain {
+        /// The SQL query to analyze
+        sql: String,
+        /// Database name (overrides config)
+        #[arg(long)]
+        db: Option<String>,
+        /// Container name (overrides config)
+        #[arg(long)]
+        container: Option<String>,
+    },
+
+    /// Semantic/full-text search in a container (Cosmos-native, no local index)
+    Search {
+        /// What to search for, in plain language
+        text: String,
+        /// Database name (overrides config)
+        #[arg(long)]
+        db: Option<String>,
+        /// Container name (overrides config)
+        #[arg(long)]
+        container: Option<String>,
+        /// Force a mode instead of auto-detecting from container policies
+        #[arg(long, value_parser = ["vector", "text", "hybrid"])]
+        mode: Option<String>,
+        /// Number of results
+        #[arg(long, default_value_t = 10)]
+        top: usize,
+        /// Print the search SQL without executing
+        #[arg(long)]
+        show_sql: bool,
+        /// Scope to a single partition key value (exact ranking)
+        #[arg(long)]
+        pk: Option<String>,
+        /// Output format
+        #[arg(long, short, value_enum)]
+        output: Option<OutputFormat>,
+    },
+
+    /// Interactive shell with context, history, and completion
+    Shell,
+
+    /// List databases in the active account
+    Databases {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// List containers in a database (shows partition key + search policies)
+    Containers {
+        /// Database name (default: profile default or picker)
+        #[arg(long)]
+        db: Option<String>,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
     },
 
     /// Execute a stored query by name (interactive picker if no name given)
@@ -110,6 +224,10 @@ pub enum Commands {
         /// Azure subscription ID (skip interactive selection)
         #[arg(long)]
         subscription: Option<String>,
+
+        /// Profile name to save this account under
+        #[arg(long)]
+        name: Option<String>,
 
         /// Auto-confirm prompts (e.g. RBAC role assignment)
         #[arg(long, short)]
@@ -245,6 +363,10 @@ pub enum Shell {
 
 impl Cli {
     pub async fn run(self) -> Result<()> {
+        if let Some(profile) = &self.profile {
+            // Single resolution path: commands read COSQ_PROFILE via Config::active.
+            unsafe { std::env::set_var("COSQ_PROFILE", profile) };
+        }
         match self.command {
             Some(Commands::Query {
                 sql,
@@ -252,6 +374,9 @@ impl Cli {
                 container,
                 output,
                 template,
+                pk,
+                first,
+                max_items,
             }) => {
                 crate::commands::query::run(crate::commands::query::QueryArgs {
                     sql,
@@ -259,9 +384,83 @@ impl Cli {
                     container,
                     output,
                     template,
+                    pk,
+                    first,
+                    max_items,
                     quiet: self.quiet,
                 })
                 .await
+            }
+            Some(Commands::Ask {
+                question,
+                db,
+                container,
+                output,
+                save,
+                sql_only,
+                yes,
+            }) => {
+                crate::commands::ask::run(crate::commands::ask::AskArgs {
+                    question,
+                    db,
+                    container,
+                    output,
+                    save,
+                    sql_only,
+                    yes,
+                    quiet: self.quiet,
+                })
+                .await
+            }
+            Some(Commands::Schema {
+                container,
+                db,
+                refresh,
+                json,
+            }) => {
+                crate::commands::schema::run(crate::commands::schema::SchemaArgs {
+                    container,
+                    db,
+                    refresh,
+                    json,
+                })
+                .await
+            }
+            Some(Commands::Explain { sql, db, container }) => {
+                crate::commands::explain::run(crate::commands::explain::ExplainArgs {
+                    sql,
+                    db,
+                    container,
+                })
+                .await
+            }
+            Some(Commands::Search {
+                text,
+                db,
+                container,
+                mode,
+                top,
+                show_sql,
+                pk,
+                output,
+            }) => {
+                crate::commands::search::run(crate::commands::search::SearchArgs {
+                    text,
+                    db,
+                    container,
+                    mode,
+                    top,
+                    show_sql,
+                    pk,
+                    output,
+                    quiet: self.quiet,
+                })
+                .await
+            }
+            Some(Commands::Shell) => crate::commands::shell::run().await,
+            Some(Commands::Databases { json }) => crate::commands::list::databases(json).await,
+            Some(Commands::Containers { db, json }) => {
+                crate::commands::list::containers(db, json).await
             }
             Some(Commands::Run {
                 name,
@@ -288,11 +487,13 @@ impl Cli {
             Some(Commands::Init {
                 account,
                 subscription,
+                name,
                 yes,
             }) => {
                 crate::commands::init::run(crate::commands::init::InitArgs {
                     account,
                     subscription,
+                    name,
                     yes,
                 })
                 .await

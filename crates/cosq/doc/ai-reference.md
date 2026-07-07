@@ -2,10 +2,12 @@
 
 ## Tool Description
 
-cosq is a CLI for querying Azure Cosmos DB instances. It connects to Cosmos DB
-accounts via Azure CLI authentication and supports ad-hoc SQL queries, stored
-queries with parameters, multi-step query pipelines, AI-powered query generation,
-and multiple output formats.
+cosq is a read-only CLI for querying Azure Cosmos DB instances. It connects via
+Azure CLI authentication (tokens cached on disk) and supports ad-hoc SQL,
+natural-language questions (`ask`), semantic/full-text search (Cosmos-native),
+stored queries with parameters, multi-step pipelines, an interactive shell,
+a query-cost doctor (`explain`), cached AI schema cards, multi-account
+profiles, and multiple output formats. cosq never writes to Cosmos DB.
 
 ## Complete CLI Command Reference
 
@@ -19,12 +21,90 @@ Execute an ad-hoc SQL query against Cosmos DB.
 | `--container` | Container name (overrides config)   |
 | `-o, --output`| Output format: json, json-compact, table, csv, template |
 | `--template`  | Path to a MiniJinja template file   |
+| `--pk`        | Scope to one partition key value (skips fan-out; much cheaper) |
+| `--first`     | Stop after N documents              |
+| `--max-items` | Page size per request               |
+
+Queries whose WHERE clause pins the container's partition key to a single
+value are automatically scoped to that partition (look for "Scoped to
+partition" on stderr). Request charge (RU) is printed to stderr; results go
+to stdout, so piping is clean.
 
 Example:
 
 ```bash
 cosq query "SELECT c.id, c.name FROM c WHERE c.type = 'user'" --db mydb --container users
 ```
+
+### `cosq ask "<QUESTION>"`
+
+Ask a natural-language question; the AI generates Cosmos SQL grounded in the
+container's schema card, executes it, and prints the results. The generated
+SQL and a one-line explanation go to stderr; results go to stdout.
+
+| Flag          | Description                              |
+|---------------|------------------------------------------|
+| `--db` / `--container` | Target (overrides config)       |
+| `-o, --output`| Output format                            |
+| `--save NAME` | Save the generated SQL as a stored query |
+| `--sql-only`  | Print the generated SQL without executing|
+| `-y, --yes`   | Skip low-confidence confirmation prompts |
+
+```bash
+cosq ask "how many orders were cancelled last week, by region?" -y -o json
+cosq ask "top 5 customers by total order value" --save top-customers
+```
+
+### `cosq search "<TEXT>"`
+
+Semantic / full-text / hybrid search using Cosmos DB's own search engine
+(no local index). Mode auto-detected from container policies: vector policy →
+query text is embedded via ailloy and matched with `VectorDistance`; full-text
+policy → BM25 `FullTextScore`; both → RRF hybrid; neither → keyword CONTAINS
+fallback. Vector results include a `_score` field; raw embeddings and Cosmos
+system fields are stripped.
+
+| Flag          | Description                                   |
+|---------------|-----------------------------------------------|
+| `--mode`      | Force `vector`, `text`, or `hybrid`           |
+| `--top N`     | Number of results (default 10)                |
+| `--show-sql`  | Print the search SQL without executing        |
+| `--pk VALUE`  | Scope to one partition (exact ranking)        |
+
+Requires an embed-capable ailloy node whose model matches the container's
+stored vectors (matched by dimensions, remembered per container).
+
+### `cosq explain "<SQL>"`
+
+The query doctor: re-runs the query with query metrics + index metrics and
+prints cost (RU), timings, documents retrieved vs returned, which indexes
+were used, recommended single/composite indexes (with the indexingPolicy
+JSON), and — when AI is enabled — a plain-language diagnosis. Read-only:
+prints fixes, never applies them.
+
+### `cosq schema [CONTAINER]`
+
+Show (building if needed) the container's schema card: field paths, types,
+example values, low-cardinality value sets, AI descriptions, inferred
+cross-container relationships, partition key, and vector/full-text policies.
+Cards are cached at `~/.cosq/schema/<profile>/<db>/<container>.yaml` for 7
+days (`COSQ_SCHEMA_TTL_DAYS`); a project-local `.cosq/schema/` copy wins.
+`--refresh` rebuilds; `--json` for machine-readable output.
+
+### `cosq shell`
+
+Interactive REPL holding context (profile, db, container, format). Type SQL
+directly (multi-line; `;` terminates), `? question` for ask-mode with
+conversation memory (follow-ups compose), and `:` meta-commands (`:db`,
+`:container`, `:profile`, `:format`, `:queries`, `:run`, `:schema`,
+`:search <text>`, `:explain`, `:help`, `:quit`). Tab completion covers
+meta-commands, database/container names, and stored-query names. Piped stdin
+runs the same dispatch non-interactively (scriptable).
+
+### `cosq databases` / `cosq containers [--db DB]`
+
+List databases / containers. Containers show partition key and vector/
+full-text policy indicators. `--json` for machine-readable output.
 
 ### `cosq run [NAME] [-- PARAMS...]`
 
@@ -70,8 +150,10 @@ Show the full contents and metadata of a stored query.
 ### `cosq queries generate [DESCRIPTION] [--db DB] [--container CONTAINER] [--project]`
 
 Generate a stored query from a natural language description using AI. If
-description is omitted, an interactive prompt is shown. The AI samples real
-documents from the target container to understand the schema.
+description is omitted, an interactive prompt is shown. Schema context comes
+from the cached schema card (built automatically on first use). For one-off
+questions prefer `cosq ask`; use `generate` when you want a reusable,
+parameterized stored query or a multi-step pipeline.
 
 ### `cosq auth status`
 
@@ -85,9 +167,11 @@ Login to Azure (opens browser).
 
 Logout from Azure.
 
-### `cosq init [--account NAME] [--subscription ID] [-y]`
+### `cosq init [--account NAME] [--subscription ID] [--name PROFILE] [-y]`
 
-Initialize cosq with a Cosmos DB account. Interactive if flags are omitted.
+Initialize a cosq profile for a Cosmos DB account. Interactive if flags are
+omitted. `--name` chooses the profile name (default `default`); run again
+with a different name to add more accounts.
 
 ### `cosq ai`
 
@@ -228,7 +312,7 @@ variable.
 
 ```jinja
 {% for doc in documents %}
-{{ doc.id | pad(start=10) }}: {{ doc.name | truncate(length=30) }}
+{{ doc.id | pad(10) }}: {{ doc.name | truncate(30) }}
 {% endfor %}
 ```
 
@@ -282,14 +366,44 @@ cosq run monthly-report -- --month 2025-01 -o template --template report.j2
 
 | Flag           | Description                                  |
 |----------------|----------------------------------------------|
-| `-v`           | Debug verbosity                              |
+| `-v`           | Debug verbosity (includes per-partition RU)  |
 | `-vv`          | Trace verbosity                              |
 | `-q, --quiet`  | Suppress non-essential output                |
 | `--no-color`   | Disable colored output                       |
+| `--profile`    | Select the account profile (also `COSQ_PROFILE`) |
 
 ## Configuration
 
-Config file: `~/.config/cosq/config.yaml`
+Config file: `~/.config/cosq/config.yaml` (override dir: `COSQ_CONFIG_DIR`).
+Format: named profiles.
 
-Contains account endpoint, default database/container, and other settings.
-Created by `cosq init`.
+```yaml
+default_profile: work
+profiles:
+  work:
+    account:
+      name: my-cosmos
+      subscription: <sub-id>
+      resource_group: my-rg
+      endpoint: https://my-cosmos.documents.azure.com:443/
+    database: appdb          # optional defaults
+    container: orders
+    embed_models:            # container -> ailloy embed node (cosq search)
+      tickets: microsoft-foundry/text-embedding-3-large
+```
+
+Profile selection: `--profile` flag > `COSQ_PROFILE` env > `default_profile`
+> the sole profile when only one exists.
+
+Other locations: AAD tokens cached at `~/.cache/cosq/tokens.json`
+(`COSQ_CACHE_DIR`); schema cards at `~/.cosq/schema/` (`COSQ_SCHEMA_DIR`);
+shell history at `~/.cosq/history`.
+
+## Tips for AI agents
+
+- Prefer `-q` plus `-o json` and parse stdout; RU/status live on stderr.
+- Use `cosq schema <container> --json` to learn a container before writing SQL.
+- `cosq ask ... -y --sql-only` generates SQL without executing (review first).
+- Include the partition key in WHERE whenever known — cosq auto-scopes and the
+  query costs a fraction of a fan-out.
+- `cosq explain` before suggesting indexing or query changes to the user.
