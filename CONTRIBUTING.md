@@ -5,7 +5,7 @@ Thank you for considering contributing to cosq! This guide will help you get sta
 ## Getting Started
 
 1. Fork the repository and clone your fork
-2. Install Rust 1.85+ via [rustup](https://rustup.rs/)
+2. Install Rust 1.95+ via [rustup](https://rustup.rs/)
 3. Build the project: `cargo build`
 4. Run tests: `cargo test`
 

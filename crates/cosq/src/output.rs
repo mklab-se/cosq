@@ -142,7 +142,7 @@ fn write_table(writer: &mut dyn Write, documents: &[Value]) -> Result<()> {
     let columns = collect_columns(documents);
 
     let mut table = Table::new();
-    table.load_preset(UTF8_FULL_CONDENSED);
+    table.load_style(UTF8_FULL_CONDENSED);
     table.set_header(columns.iter().collect::<Vec<_>>());
 
     for doc in documents {

@@ -21,8 +21,8 @@ thiserror.workspace = true
 tracing.workspace = true
 chrono.workspace = true
 async-trait = "0.1"
-base64 = "0.22"
-dirs = "5"
+base64 = "0.23"
+dirs.workspace = true
 urlencoding.workspace = true
 uuid.workspace = true
 

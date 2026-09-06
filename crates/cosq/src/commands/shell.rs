@@ -11,9 +11,10 @@ use colored::Colorize;
 use cosq_client::cosmos::{CosmosClient, QueryOptions};
 use cosq_core::config::{Config, Profile};
 use reedline::{
-    ColumnarMenu, Completer, DefaultHinter, Emacs, FileBackedHistory, KeyCode, KeyModifiers,
-    MenuBuilder, Prompt, PromptEditMode, PromptHistorySearch, Reedline, ReedlineEvent,
-    ReedlineMenu, Signal, Span, Suggestion, ValidationResult, Validator, default_emacs_keybindings,
+    ColumnarMenu, Completer, CompletionResult, DefaultHinter, Emacs, FileBackedHistory, KeyCode,
+    KeyModifiers, MenuBuilder, Prompt, PromptEditMode, PromptHistorySearch, Reedline,
+    ReedlineEvent, ReedlineMenu, Signal, Span, Suggestion, ValidationResult, Validator,
+    default_emacs_keybindings,
 };
 
 use crate::output::{OutputFormat, write_results};
@@ -196,23 +197,26 @@ impl ShellCompleter {
 }
 
 impl Completer for ShellCompleter {
-    fn complete(&mut self, line: &str, pos: usize) -> Vec<Suggestion> {
+    fn complete(&mut self, line: &str, pos: usize) -> CompletionResult {
         let prefix = &line[..pos];
         let word_start = prefix
             .rfind(char::is_whitespace)
             .map(|i| i + 1)
             .unwrap_or(0);
-        self.candidates(prefix)
+        let suggestions = self
+            .candidates(prefix)
             .into_iter()
             .map(|value| Suggestion {
                 value,
-                description: None,
-                style: None,
-                extra: None,
                 span: Span::new(word_start, pos),
                 append_whitespace: true,
+                ..Default::default()
             })
-            .collect()
+            .collect();
+        CompletionResult::Fresh {
+            suggestions,
+            partial: None,
+        }
     }
 }
 
@@ -310,6 +314,7 @@ pub async fn run() -> Result<()> {
             },
             Ok(Signal::CtrlD) => break,
             Ok(Signal::CtrlC) => continue,
+            Ok(_) => continue, // HostCommand / ExternalBreak / future variants
             Err(e) => {
                 eprintln!("{} {e}", "error:".red().bold());
                 break;
