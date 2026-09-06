@@ -85,10 +85,13 @@ crates/
 
 ## Releasing
 
-1. Bump `version` in root `Cargo.toml`
-2. Commit and push to main
-3. Tag: `git tag v0.X.Y && git push origin v0.X.Y`
-4. Release workflow builds binaries (Linux, macOS Intel+ARM, Windows), creates GitHub Release, updates Homebrew tap (`mklab-se/homebrew-tap`), publishes to crates.io
+Releases are driven by the `/release` skill (`.claude/skills/release/SKILL.md`; run with `major`, `minor`, or `patch`):
+
+1. `cargo update`, pre-flight checks (fmt, clippy, tests)
+2. Bump `version` in root `Cargo.toml` (`[workspace.package]` and the `cosq-core` / `cosq-client` pins in `[workspace.dependencies]`)
+3. Rename `[Unreleased]` in `CHANGELOG.md` to the dated version, review docs
+4. Commit `Release vX.Y.Z`, push main, tag `vX.Y.Z` and push the tag
+5. Release workflow re-runs CI, builds [auditable](https://github.com/rust-secure-code/cargo-auditable) binaries (Linux, macOS Intel+ARM, Windows) with a CycloneDX 1.5 SBOM per target, creates the GitHub Release, publishes `cosq-core` → `cosq-client` → `cosq` to crates.io, and updates the Homebrew tap (`mklab-se/homebrew-tap`)
 
 **Required GitHub secrets:**
 - `CARGO_REGISTRY_TOKEN` (in `crates-io` environment)
@@ -96,7 +99,7 @@ crates/
 
 ## Code Style
 
-- Edition 2024, MSRV 1.85
+- Edition 2024, MSRV 1.95
 - `cargo clippy` with `-D warnings` (zero warnings policy)
 - `cargo fmt` enforced in CI
 

@@ -33,9 +33,29 @@ tar xzf cosq-v*-*.tar.gz
 sudo mv cosq /usr/local/bin/
 ```
 
+## Software bill of materials (SBOM)
+
+Every release asset above has a matching CycloneDX 1.5 SBOM listing the exact crate versions
+compiled into that platform's binary:
+
+```
+cosq-vX.Y.Z-<target>.cdx.json
+```
+
+The binaries are also built with [`cargo auditable`](https://github.com/rust-secure-code/cargo-auditable),
+so the dependency list travels inside the executable itself. Check a downloaded binary against the
+RustSec advisory database with:
+
+```sh
+cargo install cargo-audit --features=fix
+cargo audit bin ./cosq
+```
+
+`syft` and `trivy` also understand this format.
+
 ## cargo install
 
-Compile from source via crates.io (requires Rust 1.85+):
+Compile from source via crates.io (requires Rust 1.95+):
 
 ```bash
 cargo install cosq
@@ -49,7 +69,7 @@ cd cosq
 cargo build --release
 ```
 
-The binary is at `target/release/cosq`. Requires Rust 1.85 or later.
+The binary is at `target/release/cosq`. Requires Rust 1.95 or later.
 
 ## cargo binstall
 

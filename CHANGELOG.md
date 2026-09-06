@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Supply-chain transparency for release builds: binaries are built with `cargo auditable`
+  (dependency list embedded in the executable, readable with `cargo audit bin` or `syft`), and
+  a per-target CycloneDX 1.5 SBOM (`cosq-vX.Y.Z-<target>.cdx.json`) is attached to every
+  GitHub release.
+
+### Changed
+
+- Dependencies upgraded to current majors: Ailloy 1.0 → 2.1, `comfy-table` 7 → 8,
+  `reedline` 0.42 → 0.51, `inquire` 0.7 → 0.9, `dirs` 6 → 7 (the `cosq-client` crate no longer
+  pins its own `dirs` 5), `base64` 0.22 → 0.23, plus `clap` 4.6, `tokio` 1.53, `uuid` 1.26,
+  `minijinja` 2.24 and a `cargo update` across the lockfile. `reqwest` stays on 0.12 to share a
+  single TLS stack with Ailloy.
+- Minimum supported Rust version raised from 1.85 to 1.95 (required by `reedline` 0.51).
+- GitHub Actions workflows moved to the Node 24 action majors (`actions/checkout@v7`,
+  `actions/upload-artifact@v7`, `actions/download-artifact@v8`, `softprops/action-gh-release@v3`).
+
 ## [1.0.0] - 2026-07-07
 
 From "run SQL from the terminal" to "talk to your data" — while staying a
