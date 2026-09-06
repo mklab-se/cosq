@@ -226,46 +226,46 @@ impl ParamDef {
 
         // Range check for numbers
         if let Some(num) = value.as_f64() {
-            if let Some(min) = self.min {
-                if num < min {
-                    return Err(StoredQueryError::BelowMin {
-                        name: self.name.clone(),
-                        value: num,
-                        min,
-                    });
-                }
+            if let Some(min) = self.min
+                && num < min
+            {
+                return Err(StoredQueryError::BelowMin {
+                    name: self.name.clone(),
+                    value: num,
+                    min,
+                });
             }
-            if let Some(max) = self.max {
-                if num > max {
-                    return Err(StoredQueryError::AboveMax {
-                        name: self.name.clone(),
-                        value: num,
-                        max,
-                    });
-                }
+            if let Some(max) = self.max
+                && num > max
+            {
+                return Err(StoredQueryError::AboveMax {
+                    name: self.name.clone(),
+                    value: num,
+                    max,
+                });
             }
         }
 
         // Choice validation
-        if let Some(ref choices) = self.choices {
-            if !choices.contains(value) {
-                let choices_str = choices
-                    .iter()
-                    .map(|c| match c {
-                        serde_json::Value::String(s) => s.clone(),
-                        other => other.to_string(),
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                return Err(StoredQueryError::InvalidChoice {
-                    name: self.name.clone(),
-                    value: match value {
-                        serde_json::Value::String(s) => s.clone(),
-                        other => other.to_string(),
-                    },
-                    choices: choices_str,
-                });
-            }
+        if let Some(ref choices) = self.choices
+            && !choices.contains(value)
+        {
+            let choices_str = choices
+                .iter()
+                .map(|c| match c {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Err(StoredQueryError::InvalidChoice {
+                name: self.name.clone(),
+                value: match value {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                },
+                choices: choices_str,
+            });
         }
 
         // Pattern check for strings
@@ -681,17 +681,17 @@ pub fn list_stored_queries() -> Result<Vec<StoredQuery>, StoredQueryError> {
     let mut queries = BTreeMap::new();
 
     // Load user-level queries first
-    if let Ok(user_dir) = user_queries_dir() {
-        if user_dir.is_dir() {
-            load_queries_from_dir(&user_dir, &mut queries)?;
-        }
+    if let Ok(user_dir) = user_queries_dir()
+        && user_dir.is_dir()
+    {
+        load_queries_from_dir(&user_dir, &mut queries)?;
     }
 
     // Load project-level queries (override user-level)
-    if let Some(project_dir) = project_queries_dir() {
-        if project_dir.is_dir() {
-            load_queries_from_dir(&project_dir, &mut queries)?;
-        }
+    if let Some(project_dir) = project_queries_dir()
+        && project_dir.is_dir()
+    {
+        load_queries_from_dir(&project_dir, &mut queries)?;
     }
 
     Ok(queries.into_values().collect())
@@ -710,15 +710,15 @@ pub fn list_query_names() -> Vec<(String, Option<String>)> {
 
     // Fallback: just scan filenames
     let mut names = BTreeMap::new();
-    if let Ok(user_dir) = user_queries_dir() {
-        if user_dir.is_dir() {
-            collect_names_from_dir(&user_dir, &mut names);
-        }
+    if let Ok(user_dir) = user_queries_dir()
+        && user_dir.is_dir()
+    {
+        collect_names_from_dir(&user_dir, &mut names);
     }
-    if let Some(project_dir) = project_queries_dir() {
-        if project_dir.is_dir() {
-            collect_names_from_dir(&project_dir, &mut names);
-        }
+    if let Some(project_dir) = project_queries_dir()
+        && project_dir.is_dir()
+    {
+        collect_names_from_dir(&project_dir, &mut names);
     }
     names.into_keys().map(|name| (name, None)).collect()
 }
@@ -727,10 +727,10 @@ fn collect_names_from_dir(dir: &Path, names: &mut BTreeMap<String, ()>) {
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().is_some_and(|ext| ext == "cosq") {
-                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    names.insert(stem.to_string(), ());
-                }
+            if path.extension().is_some_and(|ext| ext == "cosq")
+                && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+            {
+                names.insert(stem.to_string(), ());
             }
         }
     }

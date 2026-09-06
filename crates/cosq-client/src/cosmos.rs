@@ -521,11 +521,11 @@ impl CosmosClient {
             let query_resp: QueryResponse = resp.json().await?;
             documents.extend(query_resp.documents);
 
-            if let Some(first) = opts.first {
-                if documents.len() >= first {
-                    documents.truncate(first);
-                    break;
-                }
+            if let Some(first) = opts.first
+                && documents.len() >= first
+            {
+                documents.truncate(first);
+                break;
             }
 
             match next_continuation {

@@ -106,10 +106,10 @@ impl SchemaCard {
             Some(Self::cache_path(profile, database, container)),
         ];
         for path in candidates.into_iter().flatten() {
-            if let Ok(text) = std::fs::read_to_string(&path) {
-                if let Ok(card) = serde_yaml::from_str::<SchemaCard>(&text) {
-                    return Some((card, path));
-                }
+            if let Ok(text) = std::fs::read_to_string(&path)
+                && let Ok(card) = serde_yaml::from_str::<SchemaCard>(&text)
+            {
+                return Some((card, path));
             }
         }
         None

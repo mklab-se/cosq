@@ -741,18 +741,18 @@ fn format_sample_documents(docs: &[serde_json::Value]) -> String {
     let truncated: Vec<serde_json::Value> = docs.iter().map(truncate_for_prompt).collect();
 
     // Try with all docs first
-    if let Ok(json) = serde_json::to_string_pretty(&truncated) {
-        if json.len() <= 4000 {
-            return json;
-        }
+    if let Ok(json) = serde_json::to_string_pretty(&truncated)
+        && json.len() <= 4000
+    {
+        return json;
     }
 
     // Reduce to fewer documents if too large
     for n in (1..truncated.len()).rev() {
-        if let Ok(json) = serde_json::to_string_pretty(&truncated[..n]) {
-            if json.len() <= 4000 {
-                return format!("{json}\n(showing {n} of {} sampled documents)", docs.len());
-            }
+        if let Ok(json) = serde_json::to_string_pretty(&truncated[..n])
+            && json.len() <= 4000
+        {
+            return format!("{json}\n(showing {n} of {} sampled documents)", docs.len());
         }
     }
 

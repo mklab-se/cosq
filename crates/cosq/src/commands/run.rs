@@ -307,10 +307,8 @@ async fn fix_template_with_ai(
                     .prompt()
                     .unwrap_or(false);
 
-                if save {
-                    if let Err(e) = save_fixed_template(query, fixed) {
-                        eprintln!("{} Could not save fix: {e}", "Warning:".yellow().bold());
-                    }
+                if save && let Err(e) = save_fixed_template(query, fixed) {
+                    eprintln!("{} Could not save fix: {e}", "Warning:".yellow().bold());
                 }
             }
 

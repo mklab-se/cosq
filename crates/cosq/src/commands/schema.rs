@@ -52,12 +52,11 @@ pub async fn ensure_card(
     container: &str,
     refresh: bool,
 ) -> Result<SchemaCard> {
-    if !refresh {
-        if let Some((card, _path)) = SchemaCard::load(profile_name, database, container) {
-            if !card.is_stale() {
-                return Ok(card);
-            }
-        }
+    if !refresh
+        && let Some((card, _path)) = SchemaCard::load(profile_name, database, container)
+        && !card.is_stale()
+    {
+        return Ok(card);
     }
     let card = build_card(client, profile, database, container).await?;
     card.save(profile_name)?;

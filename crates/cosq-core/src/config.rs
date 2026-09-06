@@ -157,10 +157,11 @@ impl Config {
             }
         })?;
         // Old (pre-1.0) config had a top-level `account:` — point users at init.
-        if let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(&contents) {
-            if value.get("account").is_some() && value.get("profiles").is_none() {
-                return Err(ConfigError::OldFormat);
-            }
+        if let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(&contents)
+            && value.get("account").is_some()
+            && value.get("profiles").is_none()
+        {
+            return Err(ConfigError::OldFormat);
         }
         let config: Config = serde_yaml::from_str(&contents)?;
         Ok(config)
