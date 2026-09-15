@@ -173,6 +173,21 @@ cargo clippy             # Lint
 cargo fmt                # Format
 ```
 
+## Releasing
+
+Releases are driven by the [`/release`](.claude/skills/release/SKILL.md) skill (run it in Claude
+Code with `major`, `minor`, or `patch`). It updates the toolchain and dependencies, runs the CI
+gates, bumps the version, updates the changelog, then commits, pushes, and tags `vX.Y.Z`. Pushing
+the tag triggers `.github/workflows/release.yml`, which:
+
+1. Re-runs the full CI suite
+2. Builds [auditable](https://github.com/rust-secure-code/cargo-auditable) binaries for Linux, macOS
+   (Intel + ARM), and Windows, with a CycloneDX SBOM per target
+3. Creates a GitHub Release with the archives and SBOMs (see
+   [INSTALL.md](INSTALL.md#software-bill-of-materials-sbom) for how to read them)
+4. Publishes `cosq-core`, then `cosq-client`, then `cosq` to crates.io
+5. Updates the Homebrew formula in [`mklab-se/homebrew-tap`](https://github.com/mklab-se/homebrew-tap)
+
 ## License
 
 MIT

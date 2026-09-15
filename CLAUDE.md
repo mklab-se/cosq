@@ -7,7 +7,7 @@ A CLI to query your Azure Cosmos DB instances.
 ```bash
 cargo build              # Build all crates
 cargo test --workspace   # Run all tests
-cargo clippy --workspace -- -D warnings  # Lint (CI-enforced)
+cargo clippy --workspace --all-targets -- -D warnings  # Lint (CI-enforced)
 cargo fmt --all -- --check               # Format check (CI-enforced)
 cargo run -- --help      # Run the CLI
 ```
@@ -107,7 +107,7 @@ Releases are driven by the `/release` skill (`.claude/skills/release/SKILL.md`; 
 
 ### Testing
 - **Always run the full test suite before declaring work complete:** `cargo test --workspace`
-- **Always run the full CI check before pushing:** `cargo fmt --all -- --check && cargo clippy --workspace -- -D warnings && cargo test --workspace`
+- **Always run the full CI check before pushing:** `cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace`
 - Write unit tests for all new functionality — aim for high code coverage
 - Test edge cases and error paths, not just the happy path
 - For code that interacts with external services (Azure, crates.io), test the parsing/logic locally with mock data
