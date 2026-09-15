@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Dependencies refreshed via `cargo update`: Ailloy 2.1.0 → 2.1.1 (lockfile-only patch, no API
+  change), `clap` 4.6.7, `clap_complete` 4.6.11, `uuid` 1.26.1, `rustls` 0.23.45, `quinn` 0.11.12
+  and other transitive updates. Manifest requirements were already at the current majors;
+  `reqwest` stays on 0.12 to share a single TLS stack with Ailloy.
+- Minimum supported Rust version unchanged at 1.95 (still set by `reedline` 0.51).
+- CI and the release workflow now lint with `cargo clippy --workspace --all-targets`, so tests
+  and benches are covered as well; the `/release` skill gained the toolchain-update and
+  watch-and-verify steps from the template, and README gained a "Releasing" section.
+
 ## [1.1.0] - 2026-09-07
 
 ### Added
