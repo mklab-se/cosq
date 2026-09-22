@@ -45,6 +45,10 @@ cosq query "SELECT * FROM c" --output csv
 cosq query "SELECT c.name FROM c" -q | jq '.[].name'
 ```
 
+`cargo install` builds from source; on Windows that needs NASM and CMake on `PATH` (see
+[INSTALL.md](INSTALL.md#cargo-install)) — Homebrew and `cargo binstall` skip that by using a
+pre-built binary.
+
 ## Talk to your data
 
 ```bash
