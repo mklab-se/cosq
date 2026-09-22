@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Dependencies refreshed via `cargo update`: Ailloy 2.1.1 → 2.1.2 (lockfile-only patch, no API
+  change) plus transitive patch updates (`cc`, `cfg-if`, `hyper-rustls`, `pest`, `rand`, `rustix`,
+  `syn`, `unicode-ident`, and others). Manifest requirements were already at the current majors;
+  `reqwest` stays on 0.12 and `serde_yaml` on 0.9 (via `serde_yaml_ng`) per existing pins.
+- Minimum supported Rust version unchanged at 1.95 (above Ailloy 2.1.2's MSRV of 1.88).
+
 ## [1.1.1] - 2026-09-16
 
 ### Changed
