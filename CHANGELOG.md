@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-10-07
+
+### Changed
+
+- YAML library switched from `serde_yaml_ng` 0.10 to `serde_norway` 0.9, a maintained drop-in fork
+  of the deprecated `serde_yaml`, chosen fleet-wide. No format change and no migration:
+  `config.yaml`, schema cards and `.cosq` stored query files are written byte-identically, which
+  new golden tests pin.
+- `ailloy` 3.0.1, which uses the same YAML library, so only one YAML stack resolves.
+- Documentation, CLI help text and error messages no longer use em-dashes.
+
+### CI
+
+- The Check job fails on any em-dash (U+2014) in tracked files.
+- All workflow runners already use `ubuntu-latest`; no pinned Ubuntu versions.
+
 ## [1.3.0] - 2026-10-07
 
 ### Changed
