@@ -263,6 +263,45 @@ mod tests {
         assert_eq!(amount.types, vec!["number"]);
     }
 
+    /// Pins the exact bytes written for schema cards.
+    #[test]
+    fn yaml_output_is_stable() {
+        let card = SchemaCard {
+            database: "db".into(),
+            container: "orders".into(),
+            built_at: "2026-10-07T12:00:00+00:00".into(),
+            partition_key: vec!["/customerId".into()],
+            fields: vec![
+                FieldInfo {
+                    path: "status".into(),
+                    types: vec!["string".into(), "null".into()],
+                    example: Some("\"shipped\"".into()),
+                    values: vec!["no".into(), "off".into(), "1".into()],
+                    description: Some("Order status: one of the known values".into()),
+                },
+                FieldInfo {
+                    path: "notes".into(),
+                    types: vec![],
+                    example: Some("multi\nline".into()),
+                    values: vec![],
+                    description: None,
+                },
+            ],
+            relationships: vec![Relationship {
+                field: "customer.id".into(),
+                references: "customers.id".into(),
+                confidence: "high".into(),
+            }],
+            vector: Some(("/embedding".into(), 3072, "cosine".into())),
+            full_text_paths: vec!["/text".into()],
+            embed_node: Some("openai/text-embedding-3-large".into()),
+        };
+        assert_eq!(
+            serde_yaml::to_string(&card).unwrap(),
+            "database: db\ncontainer: orders\nbuilt_at: 2026-10-07T12:00:00+00:00\npartition_key:\n- /customerId\nfields:\n- path: status\n  types:\n  - string\n  - 'null'\n  example: '\"shipped\"'\n  values:\n  - no\n  - off\n  - '1'\n  description: 'Order status: one of the known values'\n- path: notes\n  types: []\n  example: |-\n    multi\n    line\nrelationships:\n- field: customer.id\n  references: customers.id\n  confidence: high\nvector:\n- /embedding\n- 3072\n- cosine\nfull_text_paths:\n- /text\nembed_node: openai/text-embedding-3-large\n"
+        );
+    }
+
     #[test]
     fn yaml_round_trip_and_staleness() {
         let card = SchemaCard {

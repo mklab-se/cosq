@@ -986,6 +986,89 @@ SELECT c.id, c.total FROM c WHERE c.status = @status
         assert_eq!(reparsed.sql, query.sql);
     }
 
+    /// Pins the exact bytes written for stored queries, so a YAML library
+    /// change cannot silently alter files on disk.
+    #[test]
+    fn test_serialized_output_is_stable() {
+        let metadata = StoredQueryMetadata {
+            description: "Orders: by status (yes/no) # tricky".to_string(),
+            database: Some("shop-db".to_string()),
+            container: Some("123".to_string()),
+            steps: Some(vec![StepDef {
+                name: "header".to_string(),
+                container: "on".to_string(),
+            }]),
+            params: vec![
+                ParamDef {
+                    name: "status".to_string(),
+                    param_type: ParamType::String,
+                    description: Some(" leading space and 'quotes' \"double\"".to_string()),
+                    default: Some(serde_json::json!("null")),
+                    choices: Some(vec![
+                        serde_json::json!("y"),
+                        serde_json::json!("~"),
+                        serde_json::json!(""),
+                        serde_json::json!(true),
+                        serde_json::json!(null),
+                        serde_json::json!(1.5),
+                        serde_json::json!(42),
+                        serde_json::json!("caf\u{e9} \u{1f600}"),
+                    ]),
+                    required: Some(false),
+                    min: Some(1.0),
+                    max: Some(0.25),
+                    pattern: Some("^[a-z]+\\d*$".to_string()),
+                },
+                ParamDef {
+                    name: "limit".to_string(),
+                    param_type: ParamType::Number,
+                    description: None,
+                    default: Some(serde_json::json!({"a": [1, 2], "b": "x: y"})),
+                    choices: None,
+                    required: None,
+                    min: Some(-3.0),
+                    max: Some(1e20),
+                    pattern: None,
+                },
+            ],
+            template: Some("Orders ({{ status }}):\n{% for doc in documents %}\n  {{ doc.id }}\tdone\n{% endfor %}\n".to_string()),
+            template_file: Some("2024-01-01".to_string()),
+            generated_by: Some("cosq ask".to_string()),
+            generated_from: Some("line one\nline two".to_string()),
+        };
+        let query = StoredQuery {
+            name: "golden".to_string(),
+            metadata,
+            sql: String::new(),
+            step_queries: BTreeMap::from([("header".to_string(), "SELECT * FROM c".to_string())]),
+        };
+        let contents = query.to_file_contents().unwrap();
+        assert_eq!(
+            contents,
+            "---\ndescription: 'Orders: by status (yes/no) # tricky'\ndatabase: shop-db\ncontainer: '123'\nsteps:\n- name: header\n  container: on\nparams:\n- name: status\n  type: string\n  description: ' leading space and ''quotes'' \"double\"'\n  default: 'null'\n  choices:\n  - y\n  - '~'\n  - ''\n  - true\n  - null\n  - 1.5\n  - 42\n  - café 😀\n  required: false\n  min: 1.0\n  max: 0.25\n  pattern: ^[a-z]+\\d*$\n- name: limit\n  type: number\n  default:\n    a:\n    - 1\n    - 2\n    b: 'x: y'\n  min: -3.0\n  max: 1e20\ntemplate: \"Orders ({{ status }}):\\n{% for doc in documents %}\\n  {{ doc.id }}\\tdone\\n{% endfor %}\\n\"\ntemplate_file: 2024-01-01\ngenerated_by: cosq ask\ngenerated_from: |-\n  line one\n  line two\n---\n-- step: header\nSELECT * FROM c\n"
+        );
+
+        let blank = StoredQueryMetadata {
+            description: "TODO: describe what this query does".to_string(),
+            database: None,
+            container: None,
+            steps: None,
+            params: Vec::new(),
+            template: None,
+            template_file: None,
+            generated_by: None,
+            generated_from: None,
+        };
+        assert_eq!(
+            serde_yaml::to_string(&blank).unwrap(),
+            "description: 'TODO: describe what this query does'\n"
+        );
+        assert_eq!(
+            serde_yaml::to_string(&"What: are the \"top\" orders?").unwrap(),
+            "'What: are the \"top\" orders?'\n"
+        );
+    }
+
     #[test]
     fn test_missing_front_matter() {
         let result = StoredQuery::parse("bad", "SELECT * FROM c");

@@ -284,4 +284,18 @@ mod profile_tests {
         assert_eq!(back.default_profile.as_deref(), Some("work"));
         assert!(back.profiles.contains_key("work"));
     }
+    /// Pins the exact bytes written for config.yaml.
+    #[test]
+    fn yaml_output_is_stable() {
+        let mut c = cfg(&["work", "demo"], Some("work"));
+        let work = c.profiles.get_mut("work").unwrap();
+        work.database = Some("appdb".into());
+        work.container = Some("true".into());
+        work.embed_models
+            .insert("orders".into(), "openai/text-embedding-3-small".into());
+        assert_eq!(
+            serde_yaml::to_string(&c).unwrap(),
+            "default_profile: work\nprofiles:\n  demo:\n    account:\n      name: demo-acct\n      subscription: s\n      resource_group: rg\n      endpoint: https://demo.documents.azure.com\n  work:\n    account:\n      name: work-acct\n      subscription: s\n      resource_group: rg\n      endpoint: https://work.documents.azure.com\n    database: appdb\n    container: 'true'\n    embed_models:\n      orders: openai/text-embedding-3-small\n"
+        );
+    }
 }
