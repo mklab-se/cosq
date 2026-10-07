@@ -59,7 +59,7 @@ pub enum StoredQueryError {
     MissingFrontMatter,
 
     #[error("failed to parse query metadata: {0}")]
-    InvalidMetadata(#[from] serde_yaml::Error),
+    InvalidMetadata(#[from] serde_norway::Error),
 
     #[error("query file has no SQL body")]
     EmptyQuery,
@@ -409,8 +409,8 @@ impl StoredQuery {
     }
 
     /// Serialize this stored query back to .cosq file format
-    pub fn to_file_contents(&self) -> Result<String, serde_yaml::Error> {
-        let yaml = serde_yaml::to_string(&self.metadata)?;
+    pub fn to_file_contents(&self) -> Result<String, serde_norway::Error> {
+        let yaml = serde_norway::to_string(&self.metadata)?;
         if self.is_multi_step() {
             // Serialize step SQL blocks in the order they appear in metadata
             let mut sql_body = String::new();
@@ -657,7 +657,7 @@ fn parse_front_matter(contents: &str) -> Result<(StoredQueryMetadata, String), S
     let yaml_str = &after_first[..closing];
     let rest = &after_first[closing + 4..]; // skip \n---
 
-    let metadata: StoredQueryMetadata = serde_yaml::from_str(yaml_str)?;
+    let metadata: StoredQueryMetadata = serde_norway::from_str(yaml_str)?;
     Ok((metadata, rest.to_string()))
 }
 
@@ -1060,11 +1060,11 @@ SELECT c.id, c.total FROM c WHERE c.status = @status
             generated_from: None,
         };
         assert_eq!(
-            serde_yaml::to_string(&blank).unwrap(),
+            serde_norway::to_string(&blank).unwrap(),
             "description: 'TODO: describe what this query does'\n"
         );
         assert_eq!(
-            serde_yaml::to_string(&"What: are the \"top\" orders?").unwrap(),
+            serde_norway::to_string(&"What: are the \"top\" orders?").unwrap(),
             "'What: are the \"top\" orders?'\n"
         );
     }

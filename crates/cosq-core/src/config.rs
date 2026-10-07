@@ -20,7 +20,7 @@ pub enum ConfigError {
     Read(#[from] std::io::Error),
 
     #[error("failed to parse config: {0}")]
-    Parse(#[from] serde_yaml::Error),
+    Parse(#[from] serde_norway::Error),
 
     #[error("config not found — run `cosq init` to get started")]
     NotFound,
@@ -157,13 +157,13 @@ impl Config {
             }
         })?;
         // Old (pre-1.0) config had a top-level `account:` — point users at init.
-        if let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(&contents)
+        if let Ok(value) = serde_norway::from_str::<serde_norway::Value>(&contents)
             && value.get("account").is_some()
             && value.get("profiles").is_none()
         {
             return Err(ConfigError::OldFormat);
         }
-        let config: Config = serde_yaml::from_str(&contents)?;
+        let config: Config = serde_norway::from_str(&contents)?;
         Ok(config)
     }
 
@@ -173,7 +173,7 @@ impl Config {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let yaml = serde_yaml::to_string(self)?;
+        let yaml = serde_norway::to_string(self)?;
         std::fs::write(&path, yaml)?;
         Ok(path)
     }
@@ -183,7 +183,7 @@ impl Config {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        let yaml = serde_yaml::to_string(self)?;
+        let yaml = serde_norway::to_string(self)?;
         std::fs::write(path, yaml)?;
         Ok(())
     }
@@ -279,8 +279,8 @@ mod profile_tests {
     #[test]
     fn round_trip() {
         let c = cfg(&["work"], Some("work"));
-        let yaml = serde_yaml::to_string(&c).unwrap();
-        let back: Config = serde_yaml::from_str(&yaml).unwrap();
+        let yaml = serde_norway::to_string(&c).unwrap();
+        let back: Config = serde_norway::from_str(&yaml).unwrap();
         assert_eq!(back.default_profile.as_deref(), Some("work"));
         assert!(back.profiles.contains_key("work"));
     }
@@ -294,7 +294,7 @@ mod profile_tests {
         work.embed_models
             .insert("orders".into(), "openai/text-embedding-3-small".into());
         assert_eq!(
-            serde_yaml::to_string(&c).unwrap(),
+            serde_norway::to_string(&c).unwrap(),
             "default_profile: work\nprofiles:\n  demo:\n    account:\n      name: demo-acct\n      subscription: s\n      resource_group: rg\n      endpoint: https://demo.documents.azure.com\n  work:\n    account:\n      name: work-acct\n      subscription: s\n      resource_group: rg\n      endpoint: https://work.documents.azure.com\n    database: appdb\n    container: 'true'\n    embed_models:\n      orders: openai/text-embedding-3-small\n"
         );
     }

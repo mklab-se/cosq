@@ -107,7 +107,7 @@ impl SchemaCard {
         ];
         for path in candidates.into_iter().flatten() {
             if let Ok(text) = std::fs::read_to_string(&path)
-                && let Ok(card) = serde_yaml::from_str::<SchemaCard>(&text)
+                && let Ok(card) = serde_norway::from_str::<SchemaCard>(&text)
             {
                 return Some((card, path));
             }
@@ -121,7 +121,7 @@ impl SchemaCard {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(&path, serde_yaml::to_string(self)?)?;
+        std::fs::write(&path, serde_norway::to_string(self)?)?;
         Ok(path)
     }
 
@@ -142,7 +142,7 @@ impl SchemaCard {
 
     /// Compact YAML for inclusion in AI prompts.
     pub fn to_prompt_yaml(&self) -> String {
-        serde_yaml::to_string(self).unwrap_or_default()
+        serde_norway::to_string(self).unwrap_or_default()
     }
 }
 
@@ -297,7 +297,7 @@ mod tests {
             embed_node: Some("openai/text-embedding-3-large".into()),
         };
         assert_eq!(
-            serde_yaml::to_string(&card).unwrap(),
+            serde_norway::to_string(&card).unwrap(),
             "database: db\ncontainer: orders\nbuilt_at: 2026-10-07T12:00:00+00:00\npartition_key:\n- /customerId\nfields:\n- path: status\n  types:\n  - string\n  - 'null'\n  example: '\"shipped\"'\n  values:\n  - no\n  - off\n  - '1'\n  description: 'Order status: one of the known values'\n- path: notes\n  types: []\n  example: |-\n    multi\n    line\nrelationships:\n- field: customer.id\n  references: customers.id\n  confidence: high\nvector:\n- /embedding\n- 3072\n- cosine\nfull_text_paths:\n- /text\nembed_node: openai/text-embedding-3-large\n"
         );
     }
@@ -319,8 +319,8 @@ mod tests {
             full_text_paths: vec!["/text".into()],
             embed_node: None,
         };
-        let yaml = serde_yaml::to_string(&card).unwrap();
-        let back: SchemaCard = serde_yaml::from_str(&yaml).unwrap();
+        let yaml = serde_norway::to_string(&card).unwrap();
+        let back: SchemaCard = serde_norway::from_str(&yaml).unwrap();
         assert_eq!(back.container, "orders");
         assert_eq!(back.vector.as_ref().unwrap().1, 3072);
         assert!(!back.is_stale());

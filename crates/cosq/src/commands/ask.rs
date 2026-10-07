@@ -284,7 +284,7 @@ fn save_stored_query(name: &str, question: &str, generated: &GeneratedQuery) -> 
     }
     let mut front = format!(
         "---\ndescription: {}\ngenerated_by: cosq ask\n",
-        serde_yaml::to_string(&question)?.trim()
+        serde_norway::to_string(&question)?.trim()
     );
     if !generated.parameters.is_empty() {
         front.push_str("params:\n");

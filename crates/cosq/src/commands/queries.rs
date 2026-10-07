@@ -97,7 +97,7 @@ fn create(name: &str, project: bool) -> Result<()> {
         generated_by: None,
         generated_from: None,
     };
-    let yaml = serde_yaml::to_string(&template)?;
+    let yaml = serde_norway::to_string(&template)?;
     let contents =
         format!("---\n{yaml}---\n-- Write your Cosmos DB SQL query below\nSELECT * FROM c\n");
     std::fs::write(&path, &contents)?;
