@@ -47,10 +47,10 @@ fn print_skill_file() {
     print!(
         r#"---
 name: cosq
-description: Query Azure Cosmos DB (read-only) — natural-language ask, ad-hoc SQL, semantic/full-text search, schema cards, query doctor, stored queries, pipelines, shell, and flexible output formatting.
+description: Query Azure Cosmos DB (read-only): natural-language ask, ad-hoc SQL, semantic/full-text search, schema cards, query doctor, stored queries, pipelines, shell, and flexible output formatting.
 ---
 
-# cosq — Azure Cosmos DB CLI
+# cosq: Azure Cosmos DB CLI
 
 Use cosq when the user needs to query or interact with Azure Cosmos DB.
 
@@ -62,21 +62,21 @@ Run this command to get full, up-to-date reference documentation:
 cosq ai skill --reference
 ```
 
-Read the output carefully — it covers every command, the stored query format,
+Read the output carefully: it covers every command, the stored query format,
 multi-step syntax, parameter passing, output formats, and common workflows.
 
 ## Quick command reference
 
-- `cosq ask "<question>" -y -o json` — natural-language question → SQL → results
-- `cosq query "<SQL>" --db <db> --container <c> [--pk <v>] [--first N]` — ad-hoc SQL
-- `cosq search "<text>" [--mode vector|text|hybrid] [--top N]` — semantic/full-text search
-- `cosq schema <container> --json` — the container's schema card (fields, types, policies)
-- `cosq explain "<SQL>"` — query cost, index usage, and recommendations
-- `cosq databases` / `cosq containers` — listings (with `--json`)
-- `cosq run <name> -- --param value` — run a stored query
-- `cosq queries list` / `generate` / `create` — stored query management
-- `cosq shell` — interactive REPL (also accepts piped scripts)
-- `cosq auth status` / `cosq ai status` — login and AI health
+- `cosq ask "<question>" -y -o json`: natural-language question → SQL → results
+- `cosq query "<SQL>" --db <db> --container <c> [--pk <v>] [--first N]`: ad-hoc SQL
+- `cosq search "<text>" [--mode vector|text|hybrid] [--top N]`: semantic/full-text search
+- `cosq schema <container> --json`: the container's schema card (fields, types, policies)
+- `cosq explain "<SQL>"`: query cost, index usage, and recommendations
+- `cosq databases` / `cosq containers`: listings (with `--json`)
+- `cosq run <name> -- --param value`: run a stored query
+- `cosq queries list` / `generate` / `create`: stored query management
+- `cosq shell`: interactive REPL (also accepts piped scripts)
+- `cosq auth status` / `cosq ai status`: login and AI health
 - `--profile <name>` selects the account profile; `-q` + `-o json` for clean piping
 "#
     );

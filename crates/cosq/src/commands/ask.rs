@@ -1,4 +1,4 @@
-//! `cosq ask` — natural-language question → Cosmos SQL → executed answer.
+//! `cosq ask`: natural-language question → Cosmos SQL → executed answer.
 
 use anyhow::{Context, Result, bail};
 use colored::Colorize;
@@ -79,7 +79,7 @@ pub fn system_prompt(card: &SchemaCard) -> String {
            c is the document alias; string functions are case-sensitive unless LOWER is used.\n\
          - READ-ONLY: only SELECT statements.\n\
          - Prefer parameters (@name) for literal values derived from the question.\n\
-         - When the question pins the partition key ({pk}), filter on it — that makes the query cheap.\n\
+         - When the question pins the partition key ({pk}), filter on it: that makes the query cheap.\n\
          - Only use fields that exist in the schema card.\n\n\
          Schema card:\n{card}",
         pk = card.partition_key.join(", "),
@@ -127,7 +127,7 @@ pub async fn generate(
 
 pub async fn run(args: AskArgs) -> Result<()> {
     if !cosq_client::ai::is_configured() {
-        bail!("AI is not configured — run `cosq ai config` (or `cosq ai enable`) first");
+        bail!("AI is not configured. Run `cosq ai config` (or `cosq ai enable`) first");
     }
     let mut config = Config::load()?;
     let (profile_name, profile) = config.active_mut(None)?;
@@ -206,7 +206,7 @@ pub async fn execute_generated(
     let interactive = std::io::IsTerminal::is_terminal(&std::io::stdin());
     if !yes && interactive && generated.confidence < 0.6 {
         let proceed = inquire::Confirm::new(&format!(
-            "confidence is {:.2} — run this query anyway?",
+            "confidence is {:.2}. Run this query anyway?",
             generated.confidence
         ))
         .with_default(true)

@@ -2,7 +2,7 @@
 //!
 //! Built once from sampled documents (optionally distilled by AI), then
 //! reused by every AI feature (`ask`, `queries generate`, `search`) instead
-//! of re-sampling per invocation. Cards are plain YAML files — reviewable,
+//! of re-sampling per invocation. Cards are plain YAML files: reviewable,
 //! editable, and committable (`./.cosq/schema/` overrides the user cache).
 
 use std::path::PathBuf;

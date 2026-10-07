@@ -1,4 +1,4 @@
-//! `cosq search` — semantic / full-text / hybrid search over a container,
+//! `cosq search`: semantic / full-text / hybrid search over a container,
 //! powered by Cosmos DB's own search engine (no local vector store).
 //!
 //! Mode selection from the container's policies (via the schema card):
@@ -10,7 +10,7 @@
 //! Cross-partition behavior (verified live, see cosmos.rs API_VERSION notes):
 //! these queries execute per partition-key-range; VectorDistance projects a
 //! mergeable score (exact merge), FullTextScore does not (per-range rank
-//! interleave — approximate).
+//! interleave, approximate).
 
 use anyhow::{Context, Result, bail};
 use colored::Colorize;
@@ -48,7 +48,7 @@ pub fn resolve_mode(card: &SchemaCard, requested: Option<&str>) -> Result<Search
         Some("vector") => {
             if !has_vector {
                 bail!(
-                    "container {} has no vector policy — available modes: {}",
+                    "container {} has no vector policy (available modes: {})",
                     card.container,
                     available(has_vector, has_fts)
                 );
@@ -58,7 +58,7 @@ pub fn resolve_mode(card: &SchemaCard, requested: Option<&str>) -> Result<Search
         Some("text") => {
             if !has_fts {
                 bail!(
-                    "container {} has no full-text policy — available modes: {}",
+                    "container {} has no full-text policy (available modes: {})",
                     card.container,
                     available(has_vector, has_fts)
                 );
@@ -68,7 +68,7 @@ pub fn resolve_mode(card: &SchemaCard, requested: Option<&str>) -> Result<Search
         Some("hybrid") => {
             if !(has_vector && has_fts) {
                 bail!(
-                    "hybrid needs both vector and full-text policies — available: {}",
+                    "hybrid needs both vector and full-text policies (available: {})",
                     available(has_vector, has_fts)
                 );
             }
@@ -122,7 +122,7 @@ pub fn build_sql(card: &SchemaCard, mode: SearchMode, text: &str, top: usize) ->
         .map(|p| format!("c{}", p.replace('/', ".")))
         .unwrap_or_default();
     match mode {
-        // `SELECT *, expr` is invalid Cosmos SQL — project the doc + score
+        // `SELECT *, expr` is invalid Cosmos SQL: project the doc + score
         // explicitly and flatten client-side.
         SearchMode::Vector => format!(
             "SELECT TOP {top} c AS doc, VectorDistance({vector_path}, @qv) AS _score \
@@ -163,7 +163,7 @@ async fn resolve_embed_node(card: &SchemaCard, dims: u32) -> Result<String> {
         .collect();
     match embed_nodes.len() {
         0 => bail!(
-            "no embed-capable ailloy node configured — add one (e.g. text-embedding-3-large) \
+            "no embed-capable ailloy node configured. Add one (e.g. text-embedding-3-large) \
              with `ailloy ai config`, capability `embed`"
         ),
         1 => Ok(embed_nodes[0].clone()),
@@ -179,7 +179,7 @@ async fn resolve_embed_node(card: &SchemaCard, dims: u32) -> Result<String> {
                 Ok(choice)
             } else {
                 bail!(
-                    "multiple embed nodes configured ({}) — set embed_models.{} in the cosq \
+                    "multiple embed nodes configured ({}). Set embed_models.{} in the cosq \
                      profile or embed_node in the schema card",
                     embed_nodes.join(", "),
                     card.container
@@ -257,7 +257,7 @@ pub async fn execute(
     if mode == SearchMode::Keyword && !quiet {
         eprintln!(
             "{}",
-            "container has no vector or full-text policy — falling back to keyword CONTAINS"
+            "container has no vector or full-text policy, falling back to keyword CONTAINS"
                 .yellow()
         );
     }
@@ -290,8 +290,8 @@ pub async fn execute(
         let vector = ailloy_client.embed_one(text).await?;
         if vector.len() as u32 != dims {
             bail!(
-                "embed node {node} produced {} dims but the container stores {dims} — \
-                 configure the matching model (embed_models.{container} in the profile)",
+                "embed node {node} produced {} dims but the container stores {dims}. \
+                 Configure the matching model (embed_models.{container} in the profile)",
                 vector.len()
             );
         }

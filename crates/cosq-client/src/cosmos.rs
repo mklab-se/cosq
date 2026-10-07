@@ -20,10 +20,10 @@ use crate::error::ClientError;
 ///   does; we use the newer one.
 /// - VectorDistance / ORDER BY RANK / RRF queries are REJECTED by the
 ///   gateway's naive cross-partition mode ("can not be directly served by
-///   the gateway") but EXECUTE FINE per partition-key-range — which is how
-///   cosq's fan-out already works — and when pk-scoped.
+///   the gateway") but EXECUTE FINE per partition-key-range (which is how
+///   cosq's fan-out already works) and when pk-scoped.
 /// - VectorDistance can be projected (client-side exact merge possible);
-///   FullTextScore cannot (SC2240) — cross-partition FTS merges are
+///   FullTextScore cannot (SC2240): cross-partition FTS merges are
 ///   approximate, pk-scoped/single-partition are exact.
 /// - A container with BOTH vector and full-text policies failed to provision
 ///   on the serverless test account; vector-only and fts-only succeeded.
@@ -293,7 +293,7 @@ impl CosmosClient {
         Ok(ContainerMeta::from_response(&raw))
     }
 
-    /// Execute a query scoped to a single logical partition — no fan-out.
+    /// Execute a query scoped to a single logical partition (no fan-out).
     pub async fn query_scoped(
         &self,
         database: &str,
@@ -580,7 +580,7 @@ impl CosmosClient {
             "parameters": parameters
         });
 
-        // Get partition key ranges and fan out the query — in parallel,
+        // Get partition key ranges and fan out the query in parallel,
         // bounded, preserving range order in the collected output.
         let ranges = self.get_partition_key_ranges(database, container).await?;
         debug!(count = ranges.len(), "querying across partition key ranges");

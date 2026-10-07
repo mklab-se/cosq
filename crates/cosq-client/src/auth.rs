@@ -194,7 +194,7 @@ pub struct TokenInfo {
     pub expires_on: i64,
 }
 
-/// Source of fresh tokens — the seam that lets tests avoid the az CLI.
+/// Source of fresh tokens: the seam that lets tests avoid the az CLI.
 #[async_trait::async_trait]
 pub trait TokenSource: Send + Sync {
     async fn fetch(&self, resource: &str) -> Result<TokenInfo, ClientError>;
@@ -237,7 +237,7 @@ impl TokenSource for AzTokenSource {
             #[serde(rename = "accessToken")]
             access_token: String,
             /// az emits BOTH `expiresOn` (local datetime string) and
-            /// `expires_on` (unix epoch seconds) — we want the epoch.
+            /// `expires_on` (unix epoch seconds). We want the epoch.
             #[serde(rename = "expires_on")]
             expires_on: Option<i64>,
         }

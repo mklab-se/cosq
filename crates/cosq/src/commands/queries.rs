@@ -1,4 +1,4 @@
-//! Queries management commands — list, create, edit, delete, show, generate
+//! Queries management commands: list, create, edit, delete, show, generate
 //!
 //! Manages stored .cosq query files in `~/.cosq/queries/` (user-level)
 //! and `.cosq/queries/` (project-level).
@@ -349,7 +349,7 @@ async fn generate(
                     && (content.contains("SELECT") || content.contains("select"));
 
                 if looks_like_query {
-                    // The AI generated a query but it has errors — retry with the error
+                    // The AI generated a query but it has errors: retry with the error
                     eprintln!(
                         "\n{} {}",
                         "Generated query has errors, retrying:".yellow().bold(),
@@ -363,7 +363,7 @@ async fn generate(
                          Fix the error and generate a valid .cosq file."
                     );
                 } else {
-                    // The AI is asking clarifying questions — show them
+                    // The AI is asking clarifying questions: show them
                     eprintln!();
                     for line in content.lines() {
                         if !line.trim().is_empty() {
@@ -602,16 +602,16 @@ fn build_system_prompt(database: &str, container_samples: &[(String, String)]) -
 
     let multi_step_rules = if is_multi {
         r#"
-MULTI-STEP QUERY RULES — when the user's request involves data from multiple containers:
+MULTI-STEP QUERY RULES (when the user's request involves data from multiple containers):
 - Use a `steps:` section in the YAML metadata listing each step with a name and container
 - The SQL body uses `-- step: <name>` markers to separate each step's SQL
 - Steps that share the same @param inputs run in PARALLEL automatically
 - A step can reference another step's result using @step.field syntax (e.g., @customer.id)
-  This creates a DEPENDENCY — the referenced step runs first, then the value from its first result row is injected
+  This creates a DEPENDENCY: the referenced step runs first, then the value from its first result row is injected
 - Do NOT create fan-out queries (one step running per row of another). This is NOT supported.
 - Each step's results are available in the template as a top-level array by step name
 
-Multi-step example (parallel — same input):
+Multi-step example (parallel, same input):
 ---
 description: Order with line items
 database: mydb
@@ -636,7 +636,7 @@ SELECT * FROM c WHERE c.orderId = @orderId
 -- step: lines
 SELECT * FROM c WHERE c.orderId = @orderId ORDER BY c.lineNumber
 
-Multi-step example (chain — step 2 depends on step 1):
+Multi-step example (chain, step 2 depends on step 1):
 ---
 description: Orders for customer by name
 params:
@@ -681,7 +681,7 @@ SELECT * FROM c WHERE c.customerId = @customer.id ORDER BY c.date DESC
 TARGET:
   Database: "{database}"
 {container_section}
-FORMAT — .cosq files use YAML front matter between --- delimiters, followed by the SQL query.
+FORMAT: .cosq files use YAML front matter between --- delimiters, followed by the SQL query.
 
 SQL RULES:
 - ONLY reference fields that exist in the sample documents above
@@ -690,7 +690,7 @@ SQL RULES:
 - Extract variable parts as @param parameters
 - Parameters: define in params section with name, type (string/number/bool), description, and optional default/choices/min/max{single_container_note}
 {multi_step_rules}
-OUTPUT TEMPLATE RULES — ALWAYS include a MiniJinja template in the .cosq file:
+OUTPUT TEMPLATE RULES: ALWAYS include a MiniJinja template in the .cosq file:
 - Templates use {{{{ variable }}}} syntax and {{% for doc in documents %}} loops
 - {template_var_note}
 
@@ -719,7 +719,7 @@ CONVERSATION RULES:
 - Be CONFIDENT. If you can make a reasonable assumption, make it and generate the query.
 - Only ask clarifying questions if the description is genuinely ambiguous (e.g., which field to filter on, or the user mentions something not in the schema)
 - When asking questions, ask 1-3 short questions. Do NOT generate a .cosq file in the same response.
-- When generating, respond with ONLY the .cosq file content — no explanation, no markdown fences."#
+- When generating, respond with ONLY the .cosq file content: no explanation, no markdown fences."#
     )
 }
 
@@ -756,7 +756,7 @@ fn format_sample_documents(docs: &[serde_json::Value]) -> String {
         }
     }
 
-    // Even one document is too big — serialize truncated version
+    // Even one document is too big: serialize truncated version
     serde_json::to_string_pretty(&truncated[..1])
         .unwrap_or_else(|_| "(documents too large to display)".to_string())
 }

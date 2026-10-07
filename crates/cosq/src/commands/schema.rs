@@ -1,4 +1,4 @@
-//! `cosq schema` — build, cache, and print a container's schema card.
+//! `cosq schema`: build, cache, and print a container's schema card.
 
 use anyhow::Result;
 use colored::Colorize;

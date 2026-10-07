@@ -1,4 +1,4 @@
-//! Run command — execute stored queries from .cosq files
+//! Run command: execute stored queries from .cosq files
 //!
 //! Resolves parameters from CLI arguments or interactive prompts,
 //! validates them, and executes the query against Cosmos DB.
@@ -113,7 +113,7 @@ pub async fn run(args: RunArgs) -> Result<()> {
                         }
                     }
                 } else {
-                    // No template — output all step results as JSON
+                    // No template: output all step results as JSON
                     let combined: serde_json::Value =
                         serde_json::to_value(&pipeline_result.step_results)?;
                     let json = serde_json::to_string_pretty(&combined)?;
@@ -273,7 +273,7 @@ async fn fix_template_with_ai(
 
     let system_prompt = format!(
         "You fix MiniJinja templates for cosq query output. \
-         Respond with ONLY the corrected template — no explanation, no markdown fences.\n\n\
+         Respond with ONLY the corrected template: no explanation, no markdown fences.\n\n\
          Available filters: truncate(length), pad(width), length, upper, lower, title, trim, replace, default, join, first, last, round.\n\
          Available variables: documents (array of results), and named step arrays for multi-step queries.\n\n\
          Sample document:\n{sample}"
@@ -368,7 +368,7 @@ fn pick_query_interactive() -> Result<StoredQuery> {
             if q.metadata.description.is_empty() {
                 q.name.clone()
             } else {
-                format!("{} — {}", q.name, q.metadata.description)
+                format!("{}: {}", q.name, q.metadata.description)
             }
         })
         .collect();

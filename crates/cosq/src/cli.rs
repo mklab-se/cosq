@@ -84,7 +84,7 @@ pub enum Commands {
         max_items: Option<u32>,
     },
 
-    /// Ask a natural-language question — AI generates and runs the SQL
+    /// Ask a natural-language question: AI generates and runs the SQL
     Ask {
         /// The question, in plain language
         question: String,
@@ -331,7 +331,7 @@ pub enum AiCommands {
     Config,
     /// Show AI status (same as running `cosq ai` without a subcommand)
     Status,
-    /// AI agent skill information — helps set up Claude Code skills for cosq
+    /// AI agent skill information: helps set up Claude Code skills for cosq
     Skill {
         /// Output the skill markdown content (ready to save as a skill file)
         #[arg(long)]

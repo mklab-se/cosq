@@ -1,10 +1,10 @@
 //! AI feature management
 //!
-//! `cosq ai`         — show status
-//! `cosq ai test`    — test AI connection
-//! `cosq ai enable`  — enable AI for cosq
-//! `cosq ai disable` — disable AI for cosq
-//! `cosq ai config`  — interactive AI node configuration
+//! `cosq ai`: show status
+//! `cosq ai test`: test AI connection
+//! `cosq ai enable`: enable AI for cosq
+//! `cosq ai disable`: disable AI for cosq
+//! `cosq ai config`: interactive AI node configuration
 
 use anyhow::Result;
 

@@ -1,8 +1,8 @@
-# Cosq 1.0 Phase 1 — Foundation Implementation Plan
+# Cosq 1.0 Phase 1: Foundation Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Modernize cosq's engine — verified wire version, parallel + partition-scoped queries, cached tokens, multi-account profiles, listing commands, current deps — as the base for shell/AI/search phases.
+**Goal:** Modernize cosq's engine (verified wire version, parallel + partition-scoped queries, cached tokens, multi-account profiles, listing commands, current deps) as the base for shell/AI/search phases.
 
 **Architecture:** Evolve the existing 3-crate workspace (`cosq` CLI, `cosq-core` config/stored-queries, `cosq-client` REST). All changes stay within the hand-rolled REST client (approved decision; no SDK).
 
@@ -53,7 +53,7 @@ pub async fn query_scoped(&self, db, container, query, params, pk_value: &Value,
 // sends x-ms-documentdb-partitionkey: [<value>] with NO fanout
 ```
 - [ ] Failing unit tests for `detect_pk_equality`: literal string/number, `@param` resolution, no-match (different field), OR → None, nested path `/a/b`, `c["field"]` bracket syntax → match.
-- [ ] Implement (string scanning, no SQL parser dep: tokenize on whitespace/operators; conservative — return None when unsure).
+- [ ] Implement (string scanning, no SQL parser dep: tokenize on whitespace/operators; conservative: return None when unsure).
 - [ ] Container metadata: fetch + cache partitionKey path per container (client method `get_container(&db,&c) -> ContainerMeta { pk_paths: Vec<String> }`).
 - [ ] Wire: query/run resolve pk (explicit `--pk` > detected) → `query_scoped`, else fan-out. `--first N` stops draining pages/ranges once N docs collected (fan-out: short-circuit buffered stream); `--max-items` sets `x-ms-max-item-count`.
 - [ ] wiremock tests: scoped query sends the pk header and hits no `/pkranges`; `--first 5` stops requesting after 5 docs. Commit `feat: partition-scoped queries, --pk/--first/--max-items`.
@@ -61,7 +61,7 @@ pub async fn query_scoped(&self, db, container, query, params, pk_value: &Value,
 ### Task 4: Token cache
 **Files:** `crates/cosq-client/src/auth.rs`; test inline (tempfile HOME override via `COSQ_CACHE_DIR` env knob)
 **Interfaces:** existing `get_token(resource) -> String` keeps signature; adds disk cache.
-- [ ] Failing test: with `COSQ_CACHE_DIR` set, first `get_token` (az mocked via injectable `TokenSource` trait — refactor az call behind `trait TokenSource { fn fetch(&self, resource) -> Result<TokenInfo> }`) writes `tokens.json` (0600) with `expires_on`; second call within validity does NOT invoke the source; expired entry re-fetches.
+- [ ] Failing test: with `COSQ_CACHE_DIR` set, first `get_token` (az mocked via injectable `TokenSource` trait: refactor az call behind `trait TokenSource { fn fetch(&self, resource) -> Result<TokenInfo> }`) writes `tokens.json` (0600) with `expires_on`; second call within validity does NOT invoke the source; expired entry re-fetches.
 - [ ] Implement: cache file `{cache_dir}/tokens.json` keyed by resource, 5-min expiry skew, permissions 0o600, corrupt cache → ignore + refetch. az `expiresOn` parsed from `az account get-access-token` JSON (switch from `-o tsv` accessToken-only to JSON to get expiry).
 - [ ] Commit `feat(client): cached AAD tokens (one az call per expiry window)`.
 
@@ -75,7 +75,7 @@ pub struct Profile { pub subscription: String, pub account: String, pub endpoint
                      pub embed_models: BTreeMap<String, String> /* container -> ailloy node; used phase 4 */ }
 impl Config { pub fn active(&self, selected: Option<&str>) -> Result<(&str, &Profile)> } // flag > COSQ_PROFILE > default_profile > sole entry
 ```
-- [ ] Failing tests: parse profile yaml; `active()` precedence incl. sole-entry fallback + unknown-profile error listing available; save round-trip. No migration from old format (spec: none) — loader error for old shape says "config format changed in 1.0 — run `cosq init`".
+- [ ] Failing tests: parse profile yaml; `active()` precedence incl. sole-entry fallback + unknown-profile error listing available; save round-trip. No migration from old format (spec: none): loader error for old shape says "config format changed in 1.0, run `cosq init`".
 - [ ] Implement; `cosq init` writes/updates a named profile (`--name`, default "default"); last-used db/container writes to the active profile.
 - [ ] Commit `feat!: multi-account profiles (--profile / COSQ_PROFILE)`.
 
@@ -90,9 +90,9 @@ impl Config { pub fn active(&self, selected: Option<&str>) -> Result<(&str, &Pro
 - [ ] Commit `feat: phase 1 foundation complete`.
 
 ## Milestone map (later plans)
-- **Phase 2 — shell**: reedline REPL, context, completions (needs schema cards stub for fields → cards module lands early in phase 3; field completion activates then).
-- **Phase 3 — schema cards + ask** (+ `queries generate` refactor).
-- **Phase 4 — search + doctor + skill/docs + release 1.0.0** (incl. `test-live-experience` skill with ailloy-eval judging).
+- **Phase 2: shell**: reedline REPL, context, completions (needs schema cards stub for fields → cards module lands early in phase 3; field completion activates then).
+- **Phase 3: schema cards + ask** (+ `queries generate` refactor).
+- **Phase 4: search + doctor + skill/docs + release 1.0.0** (incl. `test-live-experience` skill with ailloy-eval judging).
 
 ## Self-review
 Spec §4 fully covered (engine→T1-3, auth/profiles→T4-5, housekeeping→T0/T6, read-only preserved). Types consistent (QueryResult/Profile used across tasks). The spike's temporary container is the only write and is deleted in-task. No placeholders.

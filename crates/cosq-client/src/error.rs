@@ -97,7 +97,7 @@ fn extract_message(body: String) -> String {
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body)
         && let Some(msg) = json["message"].as_str().or(json["Message"].as_str())
     {
-        // Cosmos DB often appends "\r\nActivityId: ..." — strip that
+        // Cosmos DB often appends "\r\nActivityId: ...": strip that
         let clean = msg.split("\r\nActivityId:").next().unwrap_or(msg).trim();
         return clean.to_string();
     }

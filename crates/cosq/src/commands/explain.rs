@@ -1,4 +1,4 @@
-//! `cosq explain` — the query doctor: what did this query cost and why,
+//! `cosq explain`, the query doctor: what did this query cost and why,
 //! which indexes were used, and what would make it cheaper.
 
 use anyhow::Result;
@@ -133,7 +133,7 @@ pub fn print_metrics(sql: &str, metrics: &QueryMetrics) {
         }
         if composite > 0 {
             eprintln!(
-                "  {} {composite} composite index candidate(s) — see JSON below",
+                "  {} {composite} composite index candidate(s) (see JSON below)",
                 "recommended:".yellow()
             );
             eprintln!(

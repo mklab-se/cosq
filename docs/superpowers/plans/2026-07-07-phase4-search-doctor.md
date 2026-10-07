@@ -1,4 +1,4 @@
-# Cosq 1.0 Phase 4 — Search, Doctor, Skill, Release Plan
+# Cosq 1.0 Phase 4: Search, Doctor, Skill, Release Plan
 
 > Executed inline. Spec §7–8. Spike findings (cosmos.rs API_VERSION comment):
 > vector/FTS execute per-range + pk-scoped; VectorDistance projects a score
@@ -11,7 +11,7 @@
      `SELECT TOP N ..., VectorDistance(c.<path>, @qv) AS _score FROM c ORDER BY VectorDistance(...)`;
      merge per-range results by _score (order asc for cosine distance...
      verify direction from live behavior: our spike returned score 1 for the
-     identical vector on ORDER BY ascending? — the spike showed id 1 (score 1)
+     identical vector on ORDER BY ascending? The spike showed id 1 (score 1)
      first, so Cosmos cosine "distance" here is similarity-like: descending.
      Trust Cosmos's per-range ORDER BY: merge with the same comparator as the
      observed per-range order, then take TOP N.

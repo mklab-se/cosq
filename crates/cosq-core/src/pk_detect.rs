@@ -65,7 +65,7 @@ fn extract_where(sql: &str) -> Option<WhereClause> {
 }
 
 /// Find a keyword surrounded by non-identifier characters (avoids matching
-/// inside strings poorly — good enough for conservative detection: false
+/// inside strings poorly. Good enough for conservative detection: false
 /// positives here only cause a `None` result or a failed strict match below).
 fn find_keyword(haystack_lower: &str, keyword: &str) -> Option<usize> {
     let mut from = 0;

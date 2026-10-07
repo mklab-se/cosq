@@ -1,10 +1,10 @@
-//! `cosq shell` — a persistent REPL with context (profile, database,
+//! `cosq shell`: a persistent REPL with context (profile, database,
 //! container, output format), history, and completion.
 //!
 //! Input forms:
 //! - Cosmos SQL (multi-line; complete when quotes/parens balance, or on `;`)
-//! - `? <question>` — ask-mode (wired by the AI layer)
-//! - `:` meta-commands — see `:help`
+//! - `? <question>`: ask-mode (wired by the AI layer)
+//! - `:` meta-commands (see `:help`)
 
 use anyhow::Result;
 use colored::Colorize;
@@ -138,19 +138,19 @@ impl Prompt for ShellPrompt {
 const META_COMMANDS: &[(&str, &str)] = &[
     (":help", "show this help"),
     (":quit", "leave the shell (also :exit, Ctrl-D)"),
-    (":profile", ":profile <name> — switch account profile"),
-    (":db", ":db <name> — switch database"),
-    (":container", ":container <name> — switch container"),
+    (":profile", ":profile <name>: switch account profile"),
+    (":db", ":db <name>: switch database"),
+    (":container", ":container <name>: switch container"),
     (
         ":format",
-        ":format json|json-compact|table|csv — output format",
+        ":format json|json-compact|table|csv: output format",
     ),
     (":queries", "list stored queries"),
-    (":run", ":run <name> [--param value…] — run a stored query"),
+    (":run", ":run <name> [--param value…]: run a stored query"),
     (":schema", "show the container's schema card"),
     (
         ":search",
-        ":search <text> — semantic search in the container",
+        ":search <text>: semantic search in the container",
     ),
     (":explain", "explain the previous query's cost and indexing"),
 ];
@@ -277,7 +277,7 @@ pub async fn run() -> Result<()> {
     }
 
     eprintln!(
-        "{} cosq shell — {} for commands, Ctrl-D to leave",
+        "{} cosq shell: {} for commands, Ctrl-D to leave",
         "»".bold(),
         ":help".bold()
     );
@@ -550,7 +550,7 @@ async fn handle_meta(ctx: &mut ShellContext, cmd: &str, args: &[String]) -> Resu
                 (false, _) => args.join(" "),
                 (true, Some(last)) => last.clone(),
                 (true, None) => {
-                    eprintln!("no previous query — usage: :explain [sql]");
+                    eprintln!("no previous query (usage: :explain [sql])");
                     return Ok(false);
                 }
             };
@@ -569,14 +569,14 @@ async fn handle_meta(ctx: &mut ShellContext, cmd: &str, args: &[String]) -> Resu
                 Err(e) => eprintln!("{} {e:#}", "error:".red().bold()),
             }
         }
-        other => eprintln!("unknown command :{other} — try :help"),
+        other => eprintln!("unknown command :{other} (try :help)"),
     }
     Ok(false)
 }
 
 async fn handle_ask(ctx: &mut ShellContext, question: &str) {
     if !cosq_client::ai::is_configured() {
-        eprintln!("AI is not configured — run `cosq ai config` first");
+        eprintln!("AI is not configured. Run `cosq ai config` first");
         return;
     }
     let (Some(database), Some(container)) =

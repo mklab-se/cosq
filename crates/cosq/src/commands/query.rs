@@ -1,4 +1,4 @@
-//! Query command — execute SQL queries against Cosmos DB
+//! Query command: execute SQL queries against Cosmos DB
 //!
 //! Resolves database and container from CLI flags, config, or interactive
 //! prompts, then executes the query and prints results in the requested format.
@@ -41,7 +41,7 @@ pub async fn run(args: QueryArgs) -> Result<()> {
         config.save()?;
     }
 
-    // Execute query — scoped to one partition when possible.
+    // Execute query, scoped to one partition when possible.
     let opts = cosq_client::cosmos::QueryOptions {
         max_item_count: args.max_items,
         first: args.first,
@@ -54,7 +54,7 @@ pub async fn run(args: QueryArgs) -> Result<()> {
                 Ok(meta) => meta.pk_paths.first().and_then(|pk_path| {
                     cosq_core::pk_detect::detect_pk_equality(&args.sql, pk_path, &[])
                 }),
-                Err(_) => None, // metadata unavailable — plain fan-out
+                Err(_) => None, // metadata unavailable: plain fan-out
             }
         }
     };

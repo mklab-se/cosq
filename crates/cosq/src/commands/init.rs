@@ -178,10 +178,10 @@ async fn ensure_data_plane_access(
             return Ok(());
         }
         Ok(false) => {
-            // No role assigned — offer to set it up
+            // No role assigned: offer to set it up
         }
         Err(e) => {
-            // Can't check (e.g. insufficient permissions) — warn and continue
+            // Can't check (e.g. insufficient permissions): warn and continue
             println!(
                 "  {} Could not verify data plane access: {}",
                 "Warning:".yellow().bold(),

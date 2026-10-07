@@ -23,7 +23,7 @@ pub struct PipelineResult {
 
 /// Execute a multi-step stored query.
 ///
-/// Steps are executed in dependency order — steps that only reference `@param`
+/// Steps are executed in dependency order: steps that only reference `@param`
 /// parameters run in parallel, while steps referencing `@step.field` wait for
 /// that step to complete first.
 pub async fn execute(
@@ -48,7 +48,7 @@ pub async fn execute(
 
     for layer in &layers {
         if layer.len() == 1 {
-            // Single step in this layer — execute directly
+            // Single step in this layer: execute directly
             let step_name = &layer[0];
             let step_def = steps.iter().find(|s| s.name == *step_name).unwrap();
             let sql = &query.step_queries[step_name];
@@ -77,7 +77,7 @@ pub async fn execute(
             total_charge += result.request_charge;
             step_results.insert(step_name.clone(), result.documents);
         } else {
-            // Multiple steps in this layer — execute in parallel
+            // Multiple steps in this layer: execute in parallel
             let mut handles = Vec::new();
 
             for step_name in layer {
@@ -164,7 +164,7 @@ fn build_step_params(
 
         if docs.is_empty() {
             bail!(
-                "Step '{}' returned no results — cannot resolve @{}.{}",
+                "Step '{}' returned no results: cannot resolve @{}.{}",
                 step_name,
                 step_name,
                 field_name

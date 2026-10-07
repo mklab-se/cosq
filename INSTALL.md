@@ -62,9 +62,9 @@ cargo install cosq
 ```
 
 On Windows, building from source needs [NASM](https://www.nasm.us/) and [CMake](https://cmake.org/)
-on `PATH` (plus the Visual Studio Build Tools most Rust installs already have) — they're needed to
+on `PATH` (plus the Visual Studio Build Tools most Rust installs already have). They're needed to
 compile [`aws-lc-rs`](https://github.com/aws/aws-lc-rs), the TLS crypto backend. macOS and Linux need
-nothing extra. If you'd rather skip the build tools entirely, use Homebrew or `cargo binstall` below —
+nothing extra. If you'd rather skip the build tools entirely, use Homebrew or `cargo binstall` below:
 both fetch a pre-built binary.
 
 ## Build from Source
@@ -75,12 +75,12 @@ cd cosq
 cargo build --release
 ```
 
-The binary is at `target/release/cosq`. Requires Rust 1.95 or later. See the Windows note above —
+The binary is at `target/release/cosq`. Requires Rust 1.95 or later. See the Windows note above:
 the same NASM/CMake requirement applies here.
 
 ## cargo binstall
 
-If you already have [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) installed, it can download a pre-built binary from GitHub Releases instead of compiling from source — combining the convenience of `cargo install` with the speed of a binary download:
+If you already have [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) installed, it can download a pre-built binary from GitHub Releases instead of compiling from source, combining the convenience of `cargo install` with the speed of a binary download:
 
 ```bash
 cargo binstall cosq
@@ -100,17 +100,17 @@ For most users, Homebrew or a direct binary download from [GitHub Releases](http
 
 Dynamic completions include tab-completion for stored query names. Add to your shell config:
 
-**Bash** — add to `~/.bashrc`:
+**Bash**: add to `~/.bashrc`:
 ```bash
 source <(COMPLETE=bash cosq)
 ```
 
-**Zsh** — add to `~/.zshrc`:
+**Zsh**: add to `~/.zshrc`:
 ```bash
 source <(COMPLETE=zsh cosq)
 ```
 
-**Fish** — add to `~/.config/fish/config.fish`:
+**Fish**: add to `~/.config/fish/config.fish`:
 ```bash
 source (COMPLETE=fish cosq | psub)
 ```
@@ -119,22 +119,22 @@ source (COMPLETE=fish cosq | psub)
 
 If you prefer static completions (no stored query name tab-completion), use `cosq completion <shell>`:
 
-**Bash** — add to `~/.bashrc`:
+**Bash**: add to `~/.bashrc`:
 ```bash
 source <(cosq completion bash)
 ```
 
-**Zsh** — add to `~/.zshrc`:
+**Zsh**: add to `~/.zshrc`:
 ```bash
 source <(cosq completion zsh)
 ```
 
-**Fish** — save to completions directory:
+**Fish**: save to completions directory:
 ```bash
 cosq completion fish > ~/.config/fish/completions/cosq.fish
 ```
 
-**PowerShell** — add to profile:
+**PowerShell**: add to profile:
 ```powershell
 cosq completion powershell >> $PROFILE
 ```

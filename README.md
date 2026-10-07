@@ -51,7 +51,7 @@ cosq query "SELECT c.name FROM c" -q | jq '.[].name'
 ```
 
 `cargo install` builds from source; on Windows that needs NASM and CMake on `PATH` (see
-[INSTALL.md](INSTALL.md#cargo-install)) — Homebrew and `cargo binstall` skip that by using a
+[INSTALL.md](INSTALL.md#cargo-install)). Homebrew and `cargo binstall` skip that by using a
 pre-built binary.
 
 ## Talk to your data
@@ -62,7 +62,7 @@ pre-built binary.
 cosq ask "top 5 customers by total order value" --save top-customers
 cosq schema orders          # inspect the card
 
-# Semantic & full-text search — Cosmos DB's own vector/BM25 engine,
+# Semantic & full-text search: Cosmos DB's own vector/BM25 engine,
 # query embedding via ailloy; no local index
 cosq search "refund complaints about late delivery" --top 5
 
@@ -86,7 +86,7 @@ cosq (work) appdb/orders » :help
 ```
 
 Context (profile, database, container, format), tab completion, persistent
-history — and piped stdin runs the same commands non-interactively.
+history, and piped stdin runs the same commands non-interactively.
 
 ## Fast by default
 
@@ -145,11 +145,11 @@ SELECT * FROM c WHERE c.id = @orderId
 SELECT * FROM c WHERE c.id = @order.customerId
 ```
 
-Steps execute in dependency order — independent steps run in parallel, while steps referencing `@step.field` wait for that step to complete.
+Steps execute in dependency order: independent steps run in parallel, while steps referencing `@step.field` wait for that step to complete.
 
 ## AI Query Generation
 
-Generate stored queries from natural language — the AI samples your actual documents for field-accurate SQL and auto-generates output templates:
+Generate stored queries from natural language: the AI samples your actual documents for field-accurate SQL and auto-generates output templates:
 
 ```bash
 # Set up AI (any provider via ailloy: OpenAI, Anthropic, Foundry, Ollama, ...)

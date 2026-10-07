@@ -448,7 +448,7 @@ impl StoredQuery {
     }
 
     /// Build the execution order for multi-step queries.
-    /// Returns layers — steps in the same layer can execute in parallel.
+    /// Returns layers: steps in the same layer can execute in parallel.
     /// Steps referencing other steps via @step.field must run after those steps.
     pub fn execution_order(&self) -> Result<Vec<Vec<String>>, StoredQueryError> {
         let steps = match &self.metadata.steps {
@@ -697,7 +697,7 @@ pub fn list_stored_queries() -> Result<Vec<StoredQuery>, StoredQueryError> {
     Ok(queries.into_values().collect())
 }
 
-/// List stored query names (lightweight — only reads filenames, not file contents).
+/// List stored query names (lightweight: only reads filenames, not file contents).
 /// Used for shell tab-completion.
 pub fn list_query_names() -> Vec<(String, Option<String>)> {
     // Try full parse first for descriptions; fall back to filenames only
@@ -853,7 +853,7 @@ params:
 template: |
   Orders ({{ status }}):
   {% for doc in documents %}
-  {{ loop.index }}. #{{ doc.id }} — ${{ doc.total }}
+  {{ loop.index }}. #{{ doc.id }}: ${{ doc.total }}
   {% endfor %}
 ---
 SELECT c.id, c.total FROM c WHERE c.status = @status

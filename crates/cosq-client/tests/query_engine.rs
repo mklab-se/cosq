@@ -28,7 +28,7 @@ async fn fan_out_is_parallel_ordered_and_sums_ru() {
         .respond_with(ResponseTemplate::new(200).set_body_json(pkranges_body(&["0", "1", "2"])))
         .mount(&server)
         .await;
-    // range 0 is SLOW; ranges 1/2 fast — parallelism means total < sum of delays
+    // range 0 is SLOW; ranges 1/2 fast. Parallelism means total < sum of delays
     Mock::given(method("POST"))
         .and(path("/dbs/db/colls/c/docs"))
         .and(header("x-ms-documentdb-partitionkeyrangeid", "0"))

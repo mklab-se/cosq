@@ -1,4 +1,4 @@
-# cosq — AI Reference Documentation
+# cosq: AI Reference Documentation
 
 ## Tool Description
 
@@ -79,7 +79,7 @@ stored vectors (matched by dimensions, remembered per container).
 The query doctor: re-runs the query with query metrics + index metrics and
 prints cost (RU), timings, documents retrieved vs returned, which indexes
 were used, recommended single/composite indexes (with the indexingPolicy
-JSON), and — when AI is enabled — a plain-language diagnosis. Read-only:
+JSON) and, when AI is enabled, a plain-language diagnosis. Read-only:
 prints fixes, never applies them.
 
 ### `cosq schema [CONTAINER]`
@@ -213,17 +213,17 @@ params:
     type: string          # string | number | bool
     description: Human-readable description
     default: "default-value"
-    choices:              # optional — restricts allowed values
+    choices:              # optional: restricts allowed values
       - "option1"
       - "option2"
-    min: 0                # optional — minimum (number type only)
-    max: 100              # optional — maximum (number type only)
-    pattern: "^[A-Z]+"    # optional — regex validation (string type only)
-template: |               # optional — inline MiniJinja template for output
+    min: 0                # optional: minimum (number type only)
+    max: 100              # optional: maximum (number type only)
+    pattern: "^[A-Z]+"    # optional: regex validation (string type only)
+template: |               # optional: inline MiniJinja template for output
   {% for doc in documents %}
   {{ doc.id }}: {{ doc.name }}
   {% endfor %}
-template_file: path.j2    # optional — external template file path
+template_file: path.j2    # optional: external template file path
 ---
 SELECT c.id, c.name FROM c WHERE c.status = @paramName
 ```
@@ -330,7 +330,7 @@ cosq query "SELECT TOP 10 * FROM c" --db mydb --container users -o table
 
 ```bash
 cosq queries create active-users --project
-# (editor opens — add metadata and SQL)
+# (editor opens: add metadata and SQL)
 cosq run active-users -- --minAge 18 --status "active"
 ```
 
@@ -404,6 +404,6 @@ shell history at `~/.cosq/history`.
 - Prefer `-q` plus `-o json` and parse stdout; RU/status live on stderr.
 - Use `cosq schema <container> --json` to learn a container before writing SQL.
 - `cosq ask ... -y --sql-only` generates SQL without executing (review first).
-- Include the partition key in WHERE whenever known — cosq auto-scopes and the
+- Include the partition key in WHERE whenever known: cosq auto-scopes and the
   query costs a fraction of a fan-out.
 - `cosq explain` before suggesting indexing or query changes to the user.

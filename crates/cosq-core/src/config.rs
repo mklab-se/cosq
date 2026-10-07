@@ -22,14 +22,14 @@ pub enum ConfigError {
     #[error("failed to parse config: {0}")]
     Parse(#[from] serde_norway::Error),
 
-    #[error("config not found — run `cosq init` to get started")]
+    #[error("config not found (run `cosq init` to get started)")]
     NotFound,
 
     #[error("could not determine config directory")]
     NoConfigDir,
 
     #[error(
-        "no profile selected and no default set (available: {0}) — pass --profile or set default_profile"
+        "no profile selected and no default set (available: {0}). Pass --profile or set default_profile"
     )]
     NoProfile(String),
 
@@ -37,7 +37,7 @@ pub enum ConfigError {
     UnknownProfile(String, String),
 
     #[error(
-        "the config format changed in cosq 1.0 (named profiles) — run `cosq init` to recreate ~/.config/cosq/config.yaml"
+        "the config format changed in cosq 1.0 (named profiles). Run `cosq init` to recreate ~/.config/cosq/config.yaml"
     )]
     OldFormat,
 }
@@ -122,7 +122,7 @@ impl Config {
 
     fn profile_names(&self) -> String {
         if self.profiles.is_empty() {
-            "none configured — run `cosq init`".to_string()
+            "none configured, run `cosq init`".to_string()
         } else {
             self.profiles.keys().cloned().collect::<Vec<_>>().join(", ")
         }
@@ -156,7 +156,7 @@ impl Config {
                 ConfigError::Read(e)
             }
         })?;
-        // Old (pre-1.0) config had a top-level `account:` — point users at init.
+        // Old (pre-1.0) config had a top-level `account:`. Point users at init.
         if let Ok(value) = serde_norway::from_str::<serde_norway::Value>(&contents)
             && value.get("account").is_some()
             && value.get("profiles").is_none()

@@ -1,4 +1,4 @@
-//! `cosq databases` / `cosq containers` — quick listings.
+//! `cosq databases` / `cosq containers`: quick listings.
 
 use anyhow::Result;
 use colored::Colorize;

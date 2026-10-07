@@ -79,7 +79,7 @@ crates/
 - Stored queries: `.cosq` files with YAML front matter + SQL body, stored in `~/.cosq/queries/` (user) and `.cosq/queries/` (project, overrides user). Supports multi-step queries with `steps:` metadata and `-- step: <name>` SQL markers, cross-step references via `@step.field`
 - Output formatting: JSON (default), JSON-compact, table (comfy-table), CSV, MiniJinja templates
 - AI: everything flows through cached schema cards + ailloy structured output (json_schema); `cosq ask` for one-off questions, `queries generate` for reusable stored queries, `cosq search` embeds query text via an embed-capable ailloy node. Configured via `cosq ai config` (`~/.config/ailloy/config.yaml`; folder-local `.ailloy.yaml` wins)
-- Config: named profiles in `~/.config/cosq/config.yaml`; selection --profile > COSQ_PROFILE > default_profile > sole profile. cosq is READ-ONLY against Cosmos data — no writes, ever
+- Config: named profiles in `~/.config/cosq/config.yaml`; selection --profile > COSQ_PROFILE > default_profile > sole profile. cosq is READ-ONLY against Cosmos data: no writes, ever
 - Search executes on Cosmos's engine per partition-key-range (gateway rejects naive cross-partition vector/RANK queries); VectorDistance projects a mergeable score, FullTextScore does not (cross-partition FTS ranking is approximate)
 - Update checker: background task, cached at `~/.cache/cosq/`, skip with `COSQ_NO_UPDATE_CHECK=1`
 
@@ -102,16 +102,23 @@ Releases are driven by the `/release` skill (`.claude/skills/release/SKILL.md`; 
 - Edition 2024, MSRV 1.95
 - `cargo clippy` with `-D warnings` (zero warnings policy)
 - `cargo fmt` enforced in CI
-- Building from source on Windows needs NASM and CMake on `PATH` — `aws-lc-rs` (reqwest's TLS crypto
+- Building from source on Windows needs NASM and CMake on `PATH`: `aws-lc-rs` (reqwest's TLS crypto
   backend) compiles optimized assembly routines at build time. macOS and Linux need nothing extra.
   The release workflow's Windows leg installs NASM via `ilammy/setup-nasm@v1`; CMake and MSVC are
   already on the `windows-latest` image.
 
+## Writing style
+
+- **No em-dashes (U+2014), anywhere:** docs, CHANGELOG, comments, doc comments, CLI help, error
+  messages, test strings and commit messages. Use a comma where it works; otherwise a colon,
+  parentheses or a new sentence. Rust code that genuinely needs the character writes `\u{2014}`.
+  CI enforces this (the "No em-dashes" step in `ci.yml`).
+
 ## Dependency Policy
 
 We keep this tool's dependencies at their latest compatible versions, not just the versions that
-happen to still compile. Staying current is the default, not something we get to eventually —
-letting dependencies drift is how technical debt accumulates unnoticed until a security advisory or
+happen to still compile. Staying current is the default, not something we get to eventually.
+Letting dependencies drift is how technical debt accumulates unnoticed until a security advisory or
 a forced breaking upgrade makes it urgent. When a newer major is available and there's no concrete,
 documented reason not to take it (see any `# Stays on ...` comments in `Cargo.toml` for the current
 exceptions and why), take it during the next maintenance round rather than deferring it. The
@@ -123,16 +130,16 @@ mdeck + pidge + rigg + rusty-tmpl).
 ### Testing
 - **Always run the full test suite before declaring work complete:** `cargo test --workspace`
 - **Always run the full CI check before pushing:** `cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace`
-- Write unit tests for all new functionality — aim for high code coverage
+- Write unit tests for all new functionality and aim for high code coverage
 - Test edge cases and error paths, not just the happy path
 - For code that interacts with external services (Azure, crates.io), test the parsing/logic locally with mock data
 - Run the CLI binary to verify commands work end-to-end (e.g. `cargo run -- init`, `cargo run -- auth status`)
 
 ### Documentation
 - **Before pushing or releasing, review all documentation for accuracy:**
-  - `README.md` — features, quick start, badges
-  - `INSTALL.md` — installation methods, shell completions
-  - `CHANGELOG.md` — new entries for every user-visible change
-  - `CLAUDE.md` — architecture, commands, patterns
+  - `README.md`: features, quick start, badges
+  - `INSTALL.md`: installation methods, shell completions
+  - `CHANGELOG.md`: new entries for every user-visible change
+  - `CLAUDE.md`: architecture, commands, patterns
 - When adding new commands, flags, or crates, update all relevant docs in the same commit
 - `CHANGELOG.md` must be updated for every release with a dated entry following Keep a Changelog format
