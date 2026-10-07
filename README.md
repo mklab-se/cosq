@@ -16,6 +16,11 @@
   <a href="https://github.com/mklab-se/cosq/blob/main/LICENSE.md"><img src="https://img.shields.io/crates/l/cosq.svg" alt="License"></a>
 </p>
 
+<p align="center">
+  <strong>cosq 1.3</strong> is here: built on ailloy 3.0, so it shares one AI config with tools that use the new eval capability and TypeSafe provider, plus a dependency refresh.<br>
+  <a href="CHANGELOG.md"><strong>What's new</strong></a>
+</p>
+
 ## Quick Start
 
 ```bash
