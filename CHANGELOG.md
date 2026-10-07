@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- `ailloy` upgraded 2.2 to 3.0. cosq can now load an ailloy config that contains the new `eval`
+  capability, a `defaults.eval` entry or a `typesafe` provider node. Note that such a config can no
+  longer be read by tools still built on ailloy 2.x, so upgrade every tool that shares
+  `~/.config/ailloy/config.yaml` together. No source changes were needed: cosq never matches
+  exhaustively on ailloy's enums, and `cosq ai` / `cosq ai config` keep listing only the `chat`
+  capability (cosq has no eval feature, so `eval` is not shown there).
+- `reedline` 0.51 to 0.52 and `uuid` 1.26 to 1.27, plus transitive updates via `cargo update`
+  (`tokio` 1.53.2, `thiserror` 2.0.21, `comfy-table` 8.0.1, `wasm-bindgen` 0.2.129 and others).
+  `serde_yaml` stays on 0.9 via `serde_yaml_ng` 0.10. Only one `reqwest`, `crossterm` and
+  `ratatui` version resolves, shared with ailloy.
+- Minimum supported Rust version unchanged at 1.95 (set by `reedline` 0.52; ailloy 3.0 needs 1.88).
+- The release workflow already matches the template (auditable binaries, one CycloneDX 1.5 SBOM per
+  target, current action majors); no workflow changes this release.
+
 ## [1.2.0] - 2026-09-22
 
 ### Changed
