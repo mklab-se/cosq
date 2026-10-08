@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Config and cache now use the XDG layout on macOS as well as Linux, the same as Ailloy and every
+  MKLab tool: config in `$XDG_CONFIG_HOME/cosq` (default `~/.config/cosq`), cache (Azure token
+  cache, update check) in `$XDG_CACHE_HOME/cosq` (default `~/.cache/cosq`). XDG variables are
+  honoured only when they are absolute paths. Windows keeps `%APPDATA%\cosq` and
+  `%LOCALAPPDATA%\cosq`. `COSQ_CONFIG_DIR` and `COSQ_CACHE_DIR` still take precedence. The new
+  `cosq_core::paths` module is the single place that decides.
+- **macOS users:** the old location `~/Library/Application Support/cosq` is no longer read and
+  there is no automatic migration. Move your profiles over once:
+  `mkdir -p ~/.config && mv ~/Library/Application\ Support/cosq ~/.config/cosq`.
+  The old cache in `~/Library/Caches/cosq` can simply be deleted.
+
 ## [1.3.1] - 2026-10-07
 
 ### Changed

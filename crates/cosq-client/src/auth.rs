@@ -265,9 +265,8 @@ fn token_cache_path() -> std::path::PathBuf {
     let dir = std::env::var("COSQ_CACHE_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| {
-            dirs::cache_dir()
-                .unwrap_or_else(std::env::temp_dir)
-                .join("cosq")
+            cosq_core::paths::cache_dir()
+                .unwrap_or_else(|| std::env::temp_dir().join(cosq_core::paths::TOOL))
         });
     dir.join("tokens.json")
 }

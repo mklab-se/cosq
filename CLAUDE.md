@@ -47,13 +47,14 @@ crates/
     src/
       lib.rs        # Module exports
       config.rs     # Profiles config (named accounts, default_profile; COSQ_PROFILE/COSQ_CONFIG_DIR)
+      paths.rs      # Config/cache dirs: XDG on Linux AND macOS, native on Windows
       pk_detect.rs  # Partition-key equality detection for auto-scoping
       schema_card.rs # Schema card model, cache paths, TTL, mechanical field extraction
       stored_query.rs # Stored query format (.cosq files), parameter resolution, query discovery
   cosq-client/      # Azure Cosmos DB client and authentication
     src/
       lib.rs        # Module exports
-      auth.rs       # Azure CLI auth with on-disk token cache (~/.cache/cosq/tokens.json)
+      auth.rs       # Azure CLI auth with on-disk token cache (paths::cache_dir()/tokens.json, COSQ_CACHE_DIR)
       arm.rs        # ARM discovery (subscriptions, Cosmos DB accounts, RBAC role management)
       cosmos.rs     # Data plane client: parallel per-range fan-out, pk-scoped queries,
                     # container metadata (policies), query/index metrics; x-ms-version 2020-07-15
@@ -79,9 +80,14 @@ crates/
 - Stored queries: `.cosq` files with YAML front matter + SQL body, stored in `~/.cosq/queries/` (user) and `.cosq/queries/` (project, overrides user). Supports multi-step queries with `steps:` metadata and `-- step: <name>` SQL markers, cross-step references via `@step.field`
 - Output formatting: JSON (default), JSON-compact, table (comfy-table), CSV, MiniJinja templates
 - AI: everything flows through cached schema cards + ailloy structured output (json_schema); `cosq ask` for one-off questions, `queries generate` for reusable stored queries, `cosq search` embeds query text via an embed-capable ailloy node. Configured via `cosq ai config` (`~/.config/ailloy/config.yaml`; folder-local `.ailloy.yaml` wins)
+- Paths: `cosq_core::paths` is the single place that decides where files live. Linux and macOS
+  share the XDG layout, same as Ailloy: `$XDG_CONFIG_HOME/cosq` or `~/.config/cosq`,
+  `$XDG_CACHE_HOME/cosq` or `~/.cache/cosq` (XDG variables honoured only when absolute). Windows
+  uses `%APPDATA%` / `%LOCALAPPDATA%`. Never call `dirs::config_dir()`/`dirs::cache_dir()`
+  directly (on macOS those are `~/Library/...`). `COSQ_CONFIG_DIR`/`COSQ_CACHE_DIR` override.
 - Config: named profiles in `~/.config/cosq/config.yaml`; selection --profile > COSQ_PROFILE > default_profile > sole profile. cosq is READ-ONLY against Cosmos data: no writes, ever
 - Search executes on Cosmos's engine per partition-key-range (gateway rejects naive cross-partition vector/RANK queries); VectorDistance projects a mergeable score, FullTextScore does not (cross-partition FTS ranking is approximate)
-- Update checker: background task, cached at `~/.cache/cosq/`, skip with `COSQ_NO_UPDATE_CHECK=1`
+- Update checker: background task, cached at `~/.cache/cosq/update-check.json`, skip with `COSQ_NO_UPDATE_CHECK=1`
 
 ## Releasing
 

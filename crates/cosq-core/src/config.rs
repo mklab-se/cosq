@@ -1,7 +1,8 @@
 //! Configuration file handling for cosq
 //!
-//! Config is stored at `~/.config/cosq/config.yaml` (or the platform equivalent
-//! via `dirs::config_dir()`).
+//! Config is stored at `config.yaml` in [`crate::paths::config_dir`]:
+//! `$XDG_CONFIG_HOME/cosq` (default `~/.config/cosq`) on Linux and macOS,
+//! `%APPDATA%\cosq` on Windows.
 
 use std::path::{Path, PathBuf};
 
@@ -10,9 +11,6 @@ use thiserror::Error;
 
 /// Config filename within the cosq config directory
 const FILENAME: &str = "config.yaml";
-
-/// Application directory name
-const APP_DIR: &str = "cosq";
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -130,14 +128,14 @@ impl Config {
 }
 
 impl Config {
-    /// Return the path to the config file: `<config_dir>/cosq/config.yaml`.
+    /// Return the path to the config file: `config.yaml` in [`crate::paths::config_dir`].
     /// `COSQ_CONFIG_DIR` overrides the directory (tests, isolated setups).
     pub fn path() -> Result<PathBuf, ConfigError> {
         if let Ok(dir) = std::env::var("COSQ_CONFIG_DIR") {
             return Ok(PathBuf::from(dir).join(FILENAME));
         }
-        dirs::config_dir()
-            .map(|d| d.join(APP_DIR).join(FILENAME))
+        crate::paths::config_dir()
+            .map(|d| d.join(FILENAME))
             .ok_or(ConfigError::NoConfigDir)
     }
 
@@ -197,6 +195,16 @@ mod tests {
     fn test_config_path_is_under_config_dir() {
         let path = Config::path().unwrap();
         assert!(path.ends_with("cosq/config.yaml"));
+    }
+
+    #[test]
+    fn test_config_path_follows_the_paths_module() {
+        if std::env::var_os("COSQ_CONFIG_DIR").is_some() {
+            return;
+        }
+        let expected = crate::paths::config_dir().unwrap().join(FILENAME);
+        assert_eq!(Config::path().unwrap(), expected);
+        assert!(!expected.to_string_lossy().contains("Library"));
     }
 
     #[test]

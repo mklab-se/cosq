@@ -31,7 +31,7 @@ struct CrateInfo {
 }
 
 fn cache_path() -> Option<PathBuf> {
-    dirs::cache_dir().map(|d| d.join("cosq").join("update-check.json"))
+    cosq_core::paths::cache_dir().map(|d| d.join("update-check.json"))
 }
 
 fn read_cache() -> Option<UpdateCache> {
