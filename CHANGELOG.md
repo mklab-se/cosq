@@ -16,6 +16,8 @@ All notable changes to this project will be documented in this file.
   there is no automatic migration. Move your profiles over once:
   `mkdir -p ~/.config && mv ~/Library/Application\ Support/cosq ~/.config/cosq`.
   The old cache in `~/Library/Caches/cosq` can simply be deleted.
+- `minijinja` 2.24 to 3.0 (output templates). Serde support is now an explicit feature in
+  minijinja; template syntax and rendered output are unchanged.
 
 ## [1.3.1] - 2026-10-07
 

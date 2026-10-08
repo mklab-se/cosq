@@ -88,7 +88,7 @@ pub fn render_template(
         context.insert(key.clone(), value.clone());
     }
 
-    let rendered = tmpl.render(context)?;
+    let rendered = tmpl.render(minijinja::value::Serde(&context))?;
     Ok(rendered)
 }
 
@@ -115,7 +115,7 @@ pub fn render_multi_step_template(
         context.insert(key.clone(), value.clone());
     }
 
-    let rendered = tmpl.render(context)?;
+    let rendered = tmpl.render(minijinja::value::Serde(&context))?;
     Ok(rendered)
 }
 
